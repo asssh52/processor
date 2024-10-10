@@ -40,12 +40,44 @@ void Compile(const char* inputFileName){
             fprintf(outputFile, "%d %lld\n", PUSH, arg);
         }
 
+        else if (!strcmp(cmd, "add")){
+            fprintf(outputFile, "%d\n", ADD);
+        }
+
         else if (!strcmp(cmd, "sub")){
             fprintf(outputFile, "%d\n", SUB);
         }
 
+        else if (!strcmp(cmd, "mul")){
+            fprintf(outputFile, "%d\n", MUL);
+        }
+
+        else if (!strcmp(cmd, "div")){
+            fprintf(outputFile, "%d\n", DIV);
+        }
+
+        else if (!strcmp(cmd, "sqrt")){
+            fprintf(outputFile, "%d\n", SQRT);
+        }
+
+        else if (!strcmp(cmd, "sin")){
+            fprintf(outputFile, "%d\n", SIN);
+        }
+
+        else if (!strcmp(cmd, "cos")){
+            fprintf(outputFile, "%d\n", COS);
+        }
+
         else if (!strcmp(cmd, "out")){
             fprintf(outputFile, "%d\n", OUT);
+        }
+
+        else if (!strcmp(cmd, "in")){
+            fprintf(outputFile, "%d\n", IN);
+        }
+
+        else if (!strcmp(cmd, "dump")){
+            fprintf(outputFile, "%d\n", DUMP);
         }
 
         else if (!strcmp(cmd, "hlt")){
