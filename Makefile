@@ -19,7 +19,7 @@ all: run
 compile: ./bin/compiler.o
 	$(CXX) ./bin/compiler.o $(CXXFLAGS) -o compile
 
-./bin/compiler.o: ./src/compiler.cpp
+./bin/compiler.o: ./src/compiler.cpp ./hpp/compiler.hpp
 	$(CXX) -c ./src/compiler.cpp $(CXXFLAGS) -o ./bin/compiler.o
 
 run:       ./bin/processor.o ./mystack/mystack.o

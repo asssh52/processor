@@ -9,27 +9,6 @@ const size_t MAX_NUM_COMMANDS = 16;
 const char* SIGNATURE = "meow";
 const int VERSION = 1;
 
-typedef struct fileNames{
-
-    const char* inputFileName;
-    const char* outputFileName;
-    const char* logFileName;
-
-} fileNames_t;
-
-typedef struct commands{
-    const char*     name;
-
-    void*           codePointer;
-    size_t          numCommands;
-    size_t          sizeArg;
-
-    fileNames_t*    fileNames;
-    FILE*           logFile;
-    FILE*           inputFile;
-    FILE*           outputFile;
-} commands;
-
 static void Compile(fileNames_t* fileNames);
 
 int main(int argc, const char* argv[]){
@@ -43,6 +22,7 @@ int main(int argc, const char* argv[]){
     return 0;
 }
 
+/*=======================================================================*/
 
 static errors PrintFilesData(commands* codeStruct){
     if (!codeStruct) return ERR_NULLPTR;
@@ -173,12 +153,17 @@ static void Compile(fileNames_t* fileNames){
 
 
     bool RunCommands = 1;
+    size_t pc = 0;
+
     while (RunCommands){
         char cmd[99] = "";
         fscanf(inputFile, "%s", cmd);
+
         if (!strcmp(cmd, "push")){
             uint64_t arg = 0;
             fscanf(inputFile, "%lld", &arg);
+
+            //((uint64_t*)codeStruct.codePointer + pc);
 
             fprintf(outputFile, "%d %lld\n", PUSH, arg);
         }
