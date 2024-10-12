@@ -19,6 +19,7 @@ typedef struct commands{
     void*           codePointer;
     size_t          numCommands;
     size_t          sizeArg;
+    size_t          sizeAllocated;
 
     fileNames_t*    fileNames;
     FILE*           logFile;

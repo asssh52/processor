@@ -6,6 +6,7 @@
 #include "../hpp/operations.hpp"
 
 const size_t MAX_NUM_COMMANDS = 16;
+const size_t SIZE_ARG = 8;
 const char* SIGNATURE = "meow";
 const int VERSION = 1;
 
@@ -67,8 +68,12 @@ static errors CommandsCtor(commands* codeStruct, const char* name){
     codeStruct->outputFile = outputFile;
     codeStruct->logFile    = logFile;
 
+    codeStruct->numCommands = MAX_NUM_COMMANDS;                                         //count commands
+    codeStruct->sizeArg = SIZE_ARG;
+
     codeStruct->name = name;
-    codeStruct->codePointer = calloc(codeStruct->sizeArg, codeStruct->numCommands);
+    codeStruct->codePointer = calloc(codeStruct->sizeArg, codeStruct->numCommands);     //exception nlptr = calloc
+    codeStruct->sizeAllocated = codeStruct->numCommands * codeStruct->sizeArg;
 
     return OK;
 }
@@ -102,21 +107,38 @@ static errors CommandsDump(commands* codeStruct){
     fprintf(logFile, "dump of \"%s\":\n", codeStruct->name);
     if (logFile == stdout) printf(RESET);
 
+    PrintFilesData(codeStruct);
+
+    if (logFile == stdout) printf(CYN);
+    fprintf(logFile, "Struct pointer:                       \t%p\n",  codeStruct);
+    fprintf(logFile, "Code pointer:                         \t%p\n",  codeStruct->codePointer);
+    fprintf(logFile, "Number of commands:                   \t%lu\n", codeStruct->numCommands);
+    fprintf(logFile, "Size of command:                      \t%lu\n", codeStruct->sizeArg);
+    fprintf(logFile, "Allocated memory for commands(bytes): \t%lu\n", codeStruct->sizeAllocated);
+    if (logFile == stdout) printf(RESET);
+
     if (!codeStruct->codePointer){
         if (logFile == stdout) printf(RED);
         fprintf(logFile, "codeStruct does not exist\n");
         if (logFile == stdout) printf(RESET);
     }
 
-    PrintFilesData(codeStruct);
+    uint64_t* cmdPtr = (uint64_t*)(codeStruct->codePointer);                           // change type
 
-    if (logFile == stdout) printf(CYN);
-    fprintf(logFile, "Struct pointer:     \t%p\n",  codeStruct);
-    fprintf(logFile, "Code pointer:       \t%p\n",  codeStruct->codePointer);
-    fprintf(logFile, "Number of commands: \t%lu\n", codeStruct->numCommands);
-    fprintf(logFile, "Size of command:    \t%lu\n", codeStruct->sizeArg);
+    if (logFile == stdout) printf(GRN);
+    fprintf(logFile, "Commands:\n");
     if (logFile == stdout) printf(RESET);
 
+    for (size_t pc = 0; pc < MAX_NUM_COMMANDS; pc++){
+        if (*((uint64_t*)(codeStruct->codePointer)+ pc) == PUSH){
+            fprintf(codeStruct->logFile, "pc<%lu>:\t%lld %lld\n", pc, *(cmdPtr+ pc), *(cmdPtr+ pc + 1));
+            pc++;
+        }
+
+        else{
+            fprintf(codeStruct->logFile, "pc<%lu>:\t%lld\n", pc, *(cmdPtr + pc));
+        }
+    }
     fprintf(logFile, "=================================================\n");
 
     return OK;
@@ -137,6 +159,27 @@ static errors PrintSignature(commands* codeStruct){
 
 /*=======================================================================*/
 
+static errors OutputCode(commands* codeStruct){
+    if (!codeStruct || !codeStruct->codePointer) return ERR_NULLPTR;
+                                                                                        //add file verifycator
+
+    uint64_t* cmdPtr = (uint64_t*)(codeStruct->codePointer);                            // change type
+
+    for (size_t pc = 0; pc < MAX_NUM_COMMANDS; pc++){
+        if (*((uint64_t*)(codeStruct->codePointer)+ pc) == PUSH){
+            fprintf(codeStruct->outputFile, "%lld %lld\n", *(cmdPtr+ pc), *(cmdPtr+ pc + 1));
+        }
+
+        else{
+            fprintf(codeStruct->outputFile, "%lld\n", *(cmdPtr + pc));
+        }
+    }
+
+    return OK;
+}
+
+/*=======================================================================*/
+
 static void Compile(fileNames_t* fileNames){
     commands codeStruct = {};
     codeStruct.fileNames = fileNames;
@@ -150,8 +193,6 @@ static void Compile(fileNames_t* fileNames){
     FILE* inputFile  = codeStruct.inputFile;
     FILE* outputFile = codeStruct.outputFile;
 
-
-
     bool RunCommands = 1;
     size_t pc = 0;
 
@@ -163,60 +204,75 @@ static void Compile(fileNames_t* fileNames){
             uint64_t arg = 0;
             fscanf(inputFile, "%lld", &arg);
 
-            //((uint64_t*)codeStruct.codePointer + pc);
-
-            fprintf(outputFile, "%d %lld\n", PUSH, arg);
+            *((uint64_t*)codeStruct.codePointer + pc)     = PUSH;
+            *((uint64_t*)codeStruct.codePointer + pc + 1) = arg;
+            pc++;
         }
 
         else if (!strcmp(cmd, "add")){
-            fprintf(outputFile, "%d\n", ADD);
+            *((uint64_t*)codeStruct.codePointer + pc) = ADD;
+            pc++;
         }
 
         else if (!strcmp(cmd, "sub")){
-            fprintf(outputFile, "%d\n", SUB);
+            *((uint64_t*)codeStruct.codePointer + pc) = SUB;
+            pc++;
         }
 
         else if (!strcmp(cmd, "mul")){
-            fprintf(outputFile, "%d\n", MUL);
+            *((uint64_t*)codeStruct.codePointer + pc) = MUL;
+            pc++;
         }
 
         else if (!strcmp(cmd, "div")){
-            fprintf(outputFile, "%d\n", DIV);
+            *((uint64_t*)codeStruct.codePointer + pc) = DIV;
+            pc++;
         }
 
         else if (!strcmp(cmd, "sqrt")){
-            fprintf(outputFile, "%d\n", SQRT);
+            *((uint64_t*)codeStruct.codePointer + pc) = SQRT;
+            pc++;
         }
 
         else if (!strcmp(cmd, "sin")){
-            fprintf(outputFile, "%d\n", SIN);
+            *((uint64_t*)codeStruct.codePointer + pc) = SIN;
+            pc++;
         }
 
         else if (!strcmp(cmd, "cos")){
-            fprintf(outputFile, "%d\n", COS);
+            *((uint64_t*)codeStruct.codePointer + pc) = COS;
+            pc++;
         }
 
         else if (!strcmp(cmd, "out")){
-            fprintf(outputFile, "%d\n", OUT);
+            *((uint64_t*)codeStruct.codePointer + pc) = OUT;
+            pc++;
         }
 
         else if (!strcmp(cmd, "in")){
-            fprintf(outputFile, "%d\n", IN);
+            *((uint64_t*)codeStruct.codePointer + pc) = IN;
+            pc++;
         }
 
         else if (!strcmp(cmd, "dump")){
-            fprintf(outputFile, "%d\n", DUMP);
+            *((uint64_t*)codeStruct.codePointer + pc) = DUMP;
+            pc++;
         }
 
         else if (!strcmp(cmd, "hlt")){
-            fprintf(outputFile, "%d\n", HLT);
+            *((uint64_t*)codeStruct.codePointer + pc) = HLT;
+            pc++;
             RunCommands = 0;
         }
 
         else{
-            fprintf(outputFile, "ERROR\n");
+            *((uint64_t*)codeStruct.codePointer + pc) = ERR;
+            pc++;
         }
     }
+
+    CommandsDump(&codeStruct);
+    OutputCode(&codeStruct);
 
 }
 
