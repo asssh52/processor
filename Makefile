@@ -19,14 +19,11 @@ all: run
 compile: ./bin/compiler.o
 	$(CXX) ./bin/compiler.o $(CXXFLAGS) -o compile
 
-./bin/compiler.o:
+./bin/compiler.o: ./src/compiler.cpp
 	$(CXX) -c ./src/compiler.cpp $(CXXFLAGS) -o ./bin/compiler.o
 
-run:       ./bin/main.o ./bin/processor.o ./mystack/mystack.o
-	$(CXX) ./bin/main.o ./bin/processor.o     ./bin/mystack.o $(CXXFLAGS) -o main
-
-./bin/main.o:                ./src/main.cpp
-	$(CXX) -c                ./src/main.cpp $(CXXFLAGS) -o ./bin/main.o
+run:       ./bin/processor.o ./mystack/mystack.o
+	$(CXX) ./bin/processor.o     ./bin/mystack.o $(CXXFLAGS) -o main
 
 ./mystack/mystack.o: ../mystack/mystack.cpp
 	$(CXX) -c        ../mystack/mystack.cpp $(CXXFLAGS) -o ./bin/mystack.o

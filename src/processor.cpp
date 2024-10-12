@@ -6,6 +6,16 @@
 #include "../hpp/processor.hpp"
 #include "../hpp/colors.hpp"
 
+void Run(const char* inputFileName);
+
+int main(int argc, const char *argv[]){
+    const char* inputFile = (argc == 2) ? argv[1] : "/bin/user_input.asm";
+
+    Run(inputFile);
+
+    return 0;
+}
+
 void Run(const char* inputFileName){
 
     char* defaultFileName = "./bin/user_input.asm";
@@ -15,8 +25,8 @@ void Run(const char* inputFileName){
         inputFile = fopen(defaultFileName, "r");
     }
 
-    fprintf(stderr, "\n%p\n\n", inputFile);
-    fprintf(stderr, "\n%s\n\n", defaultFileName);
+    fprintf(stdout, MAG "\nfile pointer:\t%p\n", inputFile);
+    fprintf(stdout,     "file name:\t%s\n\n"   RESET, defaultFileName);
 
     Stack_t stk = {};
     StackCtor(&stk);
