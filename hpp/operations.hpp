@@ -1,5 +1,8 @@
 #pragma once
 
+const size_t MAX_NUM_COMMANDS = 16;
+const size_t SIZE_COMMAND = 8;
+
 enum operations{
     PUSH =  1,
     ADD  =  2,
@@ -15,5 +18,4 @@ enum operations{
     IN   =  21,
     DUMP =  22,
     HLT  = -1,
-    ERR  = -2
 };

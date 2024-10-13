@@ -5,8 +5,6 @@
 #include "../hpp/compiler.hpp"
 #include "../hpp/operations.hpp"
 
-const size_t MAX_NUM_COMMANDS = 16;
-const size_t SIZE_ARG = 8;
 const char* SIGNATURE = "meow";
 const int VERSION = 1;
 
@@ -69,7 +67,7 @@ static errors CommandsCtor(commands* codeStruct, const char* name){
     codeStruct->logFile    = logFile;
 
     codeStruct->numCommands = MAX_NUM_COMMANDS;                                         //count commands
-    codeStruct->sizeArg = SIZE_ARG;
+    codeStruct->sizeArg = SIZE_COMMAND;
 
     codeStruct->name = name;
     codeStruct->codePointer = calloc(codeStruct->sizeArg, codeStruct->numCommands);     //exception nlptr = calloc
