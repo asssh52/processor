@@ -6,7 +6,7 @@
 #include "../hpp/operations.hpp"
 
 const char* SIGNATURE = "meow";
-const int VERSION = 3;
+const int VERSION = 4;
 
 static void Compile(fileNames_t* fileNames);
 
@@ -295,6 +295,27 @@ static void Compile(fileNames_t* fileNames){
         else if (!strcmp(cmd, "dump")){
             *((uint64_t*)codeStruct.codePointer + pc) = DUMP;
             pc++;
+        }
+
+        else if (!strcmp(cmd, "jmp")){
+            *((uint64_t*)codeStruct.codePointer + pc) = JMP;
+
+            int64_t arg = 0;
+            fscanf(inputFile, "%lld", &arg);
+
+            *((uint64_t*)codeStruct.codePointer + pc + 1) = arg;
+            pc += 2;
+        }
+
+        else if (!strcmp(cmd, "ja")){
+            *((uint64_t*)codeStruct.codePointer + pc) = JA;
+
+            int64_t arg = 0;
+            fscanf(inputFile, "%lld", &arg);
+
+            *((uint64_t*)codeStruct.codePointer + pc + 1) = arg;
+
+            pc += 2;
         }
 
         else if (!strcmp(cmd, "hlt")){

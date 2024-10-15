@@ -7,12 +7,17 @@ enum errors{
 };
 
 typedef struct fileNames{
-
     const char* inputFileName;
     const char* outputFileName;
     const char* logFileName;
 
 } fileNames_t;
+
+typedef struct label{
+    const char name[16];
+    size_t addr;
+
+} label_t;
 
 typedef struct commands{
     const char*     name;
@@ -21,6 +26,10 @@ typedef struct commands{
     size_t          numCommands;
     size_t          sizeArg;
     size_t          sizeAllocated;
+
+    void*           labelsPointer;
+    size_t          sizeLabels;
+
 
     fileNames_t*    fileNames;
     FILE*           logFile;

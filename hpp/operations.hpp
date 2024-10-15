@@ -1,6 +1,6 @@
 #pragma once
 
-const size_t MAX_NUM_COMMANDS = 16;
+const size_t MAX_NUM_COMMANDS = 32;
 const size_t SIZE_COMMAND = 8;
 const size_t SIZE_ARG = 8;
 
@@ -19,5 +19,7 @@ enum operations{
     OUT  =  10,
     IN   =  11,
     DUMP =  12,
+    JMP  =  13,
+    JA   =  14,
     HLT  =  15,
 };

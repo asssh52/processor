@@ -11,7 +11,7 @@
 const int HEADER_SIZE = 4;
 const int REGISTER_NUM = 4;
 const char* SIGNATURE = "meow";
-const char* VERSION = "v.3";
+const char* VERSION = "v.4";
 
 
 typedef struct fileNames{
@@ -417,7 +417,7 @@ void Run(fileNames_t* fileNames){
                     }
 
                     default:{
-
+                                                 //error
                         break;
                     }
                 }
@@ -554,6 +554,37 @@ void Run(fileNames_t* fileNames){
 
                 spu.pc++;
                 break;
+            }
+
+            case JMP:{
+                int64_t num_arg = 0;
+
+                num_arg = *(nextArg + 1 * spu.sizeCommand);
+
+                spu.pc = num_arg;
+
+                break;
+            }
+
+            case JA:{
+                int64_t num_arg = 0, first_arg = 0, second_arg = 0;
+
+                num_arg = *(nextArg + 1 * spu.sizeCommand);
+
+                StackPop(spu.stk, &first_arg);
+                StackPop(spu.stk, &second_arg);
+
+                if (first_arg > second_arg){
+                    spu.pc = num_arg;
+
+                    break;
+                }
+
+                else{
+                    spu.pc += 2;
+
+                    break;
+                }
             }
 
             case HLT:{
