@@ -6,7 +6,7 @@
 #include "../hpp/operations.hpp"
 
 const char* SIGNATURE = "meow";
-const int VERSION = 1;
+const int VERSION = 3;
 
 static void Compile(fileNames_t* fileNames);
 
@@ -43,7 +43,6 @@ static errors PrintFilesData(commands* codeStruct){
 
     return OK;
 }
-
 
 /*=======================================================================*/
 
@@ -121,21 +120,14 @@ static errors CommandsDump(commands* codeStruct){
         if (logFile == stdout) printf(RESET);
     }
 
-    uint64_t* cmdPtr = (uint64_t*)(codeStruct->codePointer);                           // change type
+    int64_t* cmdPtr = (int64_t*)(codeStruct->codePointer);                           // change type
 
     if (logFile == stdout) printf(GRN);
     fprintf(logFile, "Commands:\n");
     if (logFile == stdout) printf(RESET);
 
     for (size_t pc = 0; pc < MAX_NUM_COMMANDS; pc++){
-        if (*((uint64_t*)(codeStruct->codePointer)+ pc) == PUSH){
-            fprintf(codeStruct->logFile, "pc<%lu>:\t%lld %lld\n", pc, *(cmdPtr+ pc), *(cmdPtr+ pc + 1));
-            pc++;
-        }
-
-        else{
             fprintf(codeStruct->logFile, "pc<%lu>:\t%lld\n", pc, *(cmdPtr + pc));
-        }
     }
     fprintf(logFile, "=================================================\n");
 
@@ -161,19 +153,21 @@ static errors OutputCode(commands* codeStruct){
     if (!codeStruct || !codeStruct->codePointer) return ERR_NULLPTR;
                                                                                         //add file verifycator
 
-    uint64_t* cmdPtr = (uint64_t*)(codeStruct->codePointer);                            // change type
+    int64_t* cmdPtr = (int64_t*)(codeStruct->codePointer);                            // change type
 
     for (size_t pc = 0; pc < MAX_NUM_COMMANDS; pc++){
-        if (*((uint64_t*)(codeStruct->codePointer)+ pc) == PUSH){
-            fprintf(codeStruct->outputFile, "%lld %lld\n", *(cmdPtr+ pc), *(cmdPtr+ pc + 1));
-        }
-
-        else{
-            fprintf(codeStruct->outputFile, "%lld\n", *(cmdPtr + pc));
-        }
+        fprintf(codeStruct->outputFile, "%lld\n", *(cmdPtr + pc));
     }
 
     return OK;
+}
+
+/*=======================================================================*/
+                                                            //capital letters
+int FindRegisterName(char arg[3]){
+
+    return arg[0] - 'a' + 1;
+
 }
 
 /*=======================================================================*/
@@ -199,12 +193,58 @@ static void Compile(fileNames_t* fileNames){
         fscanf(inputFile, "%s", cmd);
 
         if (!strcmp(cmd, "push")){
-            uint64_t arg = 0;
-            fscanf(inputFile, "%lld", &arg);
+            int64_t arg         = 0;
+            int64_t arg2        = 0;
+            char    reg_name[3] = "";
 
-            *((uint64_t*)codeStruct.codePointer + pc)     = PUSH;
+            int firstArgExist = fscanf(inputFile, "%lld", &arg);
+            if (!firstArgExist){
+                                        fscanf(inputFile, "%s", reg_name);
+                int secondArgExist =    fscanf(inputFile, " + %lld", &arg2);
+
+                if (!secondArgExist){
+                    *((int64_t*)codeStruct.codePointer + pc)     = 0x21;
+
+                    arg = FindRegisterName(reg_name);
+
+                    *((int64_t*)codeStruct.codePointer + pc + 1) = arg;
+
+                    pc += 2;
+                }
+
+                else{
+                    *((int64_t*)codeStruct.codePointer + pc)     = 0x31;
+
+                    arg = FindRegisterName(reg_name);
+
+                    *((int64_t*)codeStruct.codePointer + pc + 1) = arg;
+                    *((int64_t*)codeStruct.codePointer + pc + 2) = arg2;
+
+                    pc += 3;
+                }
+            }
+
+            else{
+
+                *((int64_t*)codeStruct.codePointer + pc)     = 0x11;
+                *((int64_t*)codeStruct.codePointer + pc + 1) = arg;
+
+                pc += 2;
+
+            }
+        }
+
+        else if (!strcmp(cmd, "pop")){
+            char reg_name[3] = "";
+            int64_t arg = 0;
+
+            fscanf(inputFile, "%s", reg_name);
+            arg = FindRegisterName(reg_name);
+
+            *((uint64_t*)codeStruct.codePointer + pc) = POP;
             *((uint64_t*)codeStruct.codePointer + pc + 1) = arg;
-            pc++;
+
+            pc += 2;
         }
 
         else if (!strcmp(cmd, "add")){

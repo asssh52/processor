@@ -9,8 +9,10 @@
 #define MEOW fprintf(stderr, "\e[0;31m" "\nmeow\n" "\e[0m");
 
 const int HEADER_SIZE = 4;
+const int REGISTER_NUM = 4;
 const char* SIGNATURE = "meow";
-const int VERSION = 1;
+const char* VERSION = "v.3";
+
 
 typedef struct fileNames{
 
@@ -25,10 +27,18 @@ typedef struct spu{
 
     Stack_t*        stk;
     void*           codePointer;
-    size_t          numCommands;
+    void*           registersPointer;
+
     size_t          pc;
     size_t          sizeCommand;
-    size_t          sizeAllocated;
+    size_t          sizeArg;
+    size_t          numCommands;
+    size_t          memCommandsAllocated;
+    size_t          numRegisters;
+    size_t          memRegistersAllocated;
+
+    size_t          errorType;                                      //errors_t?
+
 
     fileNames_t*    fileNames;
     FILE*           logFile;
@@ -37,8 +47,11 @@ typedef struct spu{
 } spu_t;
 
 enum errors{
-    OK_P = 0,
-    ERR_NULLPTR_P = 1
+    OK_ = 0,
+    ERR_NULLPTR_ = 1,
+    ERR_ = 2,
+    INVALID_VERSION = 3,
+    INVALID_SIGNATURE = 4
 };
 
 void Run(fileNames_t* fileNames);
@@ -47,6 +60,8 @@ static errors ProcessorCtor     (spu_t* spu);
 static errors ProcessorDtor     (spu_t* spu);
 static errors CheckSignature    (spu_t* spu);
 static errors FillCodeBuffer    (spu_t* spu);
+static errors PrintFilesData    (spu_t* spu);
+static errors ProcessorDump     (spu_t* spu);
 
 /*=================================================================*/
 
@@ -55,7 +70,8 @@ int main(int argc, const char *argv[]){
 
     fileNames.inputFileName  = (argc == 3) ? argv[1]  : "./bin/user_input.asm";
     fileNames.outputFileName = (argc == 3) ? argv[2]  : "stdout";
-
+    //fileNames.logFileName    = "meow.txt";
+    fileNames.outputFileName   = "meow.txt";
     Run(&fileNames);
 
     return 0;
@@ -63,69 +79,78 @@ int main(int argc, const char *argv[]){
 
 /*=================================================================*/
 
-static errors ProcessorCtor(spu_t* spu){
-    if (!spu) return ERR_NULLPTR_P;
-    if (!spu->fileNames) return ERR_NULLPTR_P;
+static errors ProcessorCtor(spu_t* spu, const char* name){
+    if (!spu) return ERR_NULLPTR_;
+    if (!spu->fileNames) return ERR_NULLPTR_;
 
-    // WORKING WITH FILES:
+    spu->name = name;
+
+    // WORK WITH FILES:
     const char* defaultFileNameIn  = "./bin/user_output.asm";
     const char* defaultFileNameOut = "stdout";
 
-    FILE* inputFile  = fopen(spu->fileNames->inputFileName, "r");
-    if (inputFile == nullptr)  spu->inputFile = fopen(defaultFileNameIn, "r");
+    spu->inputFile  = fopen(spu->fileNames->inputFileName,  "r");
+    if (spu->inputFile  == nullptr)     spu->inputFile = fopen(defaultFileNameIn, "r");
 
-    FILE* outputFile = fopen(spu->fileNames->outputFileName, "w");
-    if (outputFile == nullptr) spu->outputFile = stdout;
+    spu->outputFile = fopen(spu->fileNames->outputFileName, "w");
+    if (spu->outputFile == nullptr)     spu->outputFile = stdout;
 
-    FILE* logFile    = fopen(spu->fileNames->logFileName, "w");
-    if (logFile == nullptr) spu->logFile = stdout;
+    spu->logFile    = fopen(spu->fileNames->logFileName,    "w");
+    if (spu->logFile    == nullptr)     spu->logFile = stdout;
 
-
-    //INITIALIZING STACK:
+    //INITIALIZE STACK:
     spu->stk = (Stack_t*)calloc(sizeof(Stack_t), 1);
     StackCtor(spu->stk);                                             // check if allocated
-    fprintf(stderr, "\nmeow\n");
-    //FILLING STRUCTURE FIELDS:
-    spu->numCommands = MAX_NUM_COMMANDS;
-    spu->sizeCommand = SIZE_COMMAND;
 
+    //FILL STRUCTURE FIELDS:
+    spu->numRegisters   = REGISTER_NUM;
+    spu->numCommands    = MAX_NUM_COMMANDS;
+    spu->sizeCommand    = SIZE_COMMAND;
+    spu->sizeArg        = SIZE_ARG;
     spu->pc = 0;
-    fprintf(stderr, "\nmeow\n");
-    //INITIALIZING CODE BUFFER:
-    spu->codePointer   = calloc(spu->sizeCommand, spu->numCommands); // check if allocated
-    spu->sizeAllocated = spu->sizeCommand * spu->numCommands;
-    fprintf(stderr, "\nmeow\n");
-    //VERIFY CODE:
-    CheckSignature(spu);
-    fprintf(stderr, "\nmeow\n");
-    //FILL CODE BUFFER:
-    FillCodeBuffer(spu);
 
-    return OK_P;
+    //INITIALIZE CODE BUFFER:
+    spu->codePointer                = calloc(spu->sizeCommand, spu->numCommands); // check if allocated
+    spu->memCommandsAllocated       = spu->sizeCommand * spu->numCommands;
+
+    //INITIALIZE REGISTER BUFFER:
+    spu->registersPointer           = calloc(spu->sizeArg, spu->numRegisters);
+    spu->memRegistersAllocated      = spu->sizeArg * spu->numRegisters;
+
+    //VERIFY CODE:
+    if (CheckSignature(spu)) return ERR_;
+
+    //FILL CODE BUFFER:
+    if (!spu->errorType) FillCodeBuffer(spu);
+    else ProcessorDump(spu);
+
+    return OK_;
 }
 
 /*=================================================================*/
 
 static errors ProcessorDtor(spu_t* spu){
-    if (!spu) return ERR_NULLPTR_P;
+    if (!spu) return ERR_NULLPTR_;
 
-    //CLOSING FILES:
-    if(!spu->inputFile)     fclose(spu->inputFile);
-    if(!spu->outputFile)    fclose(spu->outputFile);
-    if(!spu->logFile)       fclose(spu->logFile);
+    //CLOSE FILES:
+    if(!spu->inputFile)                                 fclose(spu->inputFile);
+    if(!spu->outputFile && spu->logFile != stdout)      fclose(spu->outputFile);
+    if(!spu->logFile    && spu->logFile != stdout)      fclose(spu->logFile);
 
     free(spu->codePointer);
+    free(spu->registersPointer);
     StackDtor(spu->stk);
 
-    spu->sizeAllocated  = 0;
-    spu->pc             = 0;
-    spu->inputFile      = nullptr;
-    spu->outputFile     = nullptr;
-    spu->logFile        = nullptr;
+    spu->memCommandsAllocated   = 0;
+    spu->memRegistersAllocated  = 0;
+    spu->pc                     = 0;
+    spu->inputFile              = nullptr;
+    spu->outputFile             = nullptr;
+    spu->logFile                = nullptr;
 
-    printf("spu:%s destroyed", spu->name);
+    printf(BGRN "spu:\"%s\" destroyed\n" RESET, spu->name);
 
-    return OK_P;
+    return OK_;
 }
 
 /*=================================================================*/
@@ -133,46 +158,194 @@ static errors ProcessorDtor(spu_t* spu){
 static errors CheckSignature(spu_t* spu){
                                                     //verificator
     char signatureBuffer[256] = "";
-    int version = 0;
+    int version = -1;
 
-    MEOW
-    fscanf(spu->inputFile, "signature:%s\n", signatureBuffer);
-    fscanf(spu->inputFile, "version:%d", &version);
-    MEOW
+    for (int i = 0; i < HEADER_SIZE; i++){
 
-    fprintf(stderr, "\n[%s]\n", signatureBuffer);
-    fprintf(stderr, "\n[%d]\n", version);
-    /*
-    if (version != VERSION){
-        printf("VERSION\n");
-        abort();
-    }*/
+        fscanf(spu->inputFile, "%s", signatureBuffer);
 
-    return OK_P;
+        if (!strcmp(signatureBuffer, "signature:")){
+
+            fscanf(spu->inputFile, "%s", signatureBuffer);
+
+            fprintf(stderr, "\n[%s]OK\n", signatureBuffer);
+
+            if (strcmp(signatureBuffer, SIGNATURE)){
+                printf(RED "invalid signature\n" RESET);
+                spu->errorType = INVALID_SIGNATURE;
+
+                return INVALID_SIGNATURE;
+            }
+        }
+
+        else if (!strcmp(signatureBuffer, "version:")){
+
+            fscanf(spu->inputFile, "%s", signatureBuffer);
+
+            fprintf(stderr, "\n[%s]OK\n", signatureBuffer);
+
+            if (strcmp(signatureBuffer, VERSION)){
+                printf(RED "invalid version\n" RESET);
+                spu->errorType = INVALID_VERSION;
+
+                return INVALID_VERSION;
+            }
+        }
+    }
+
+    return OK_;
 }
 
 /*=================================================================*/
 
 static errors FillCodeBuffer(spu_t* spu){
                                                         //verificator
-
-    /*for (int i = 0; i < HEADER_SIZE; i++){
-        fscanf(spu->inputFile, "\n");
-    }*/
-
     for (int ip = 0; ip < MAX_NUM_COMMANDS; ip++){
-
         int64_t* pointer = (int64_t*)spu->codePointer + ip;
-
-        int a = fscanf(spu->inputFile, "%d\n", pointer);
-        printf("a:%d\n", a);
-
-        printf("%ld\n", *pointer);
-
-        if (*pointer == 1) ip++;
+        fscanf(spu->inputFile, "%lld\n", pointer);
     }
 
-    return OK_P;
+    return OK_;
+}
+
+/*=================================================================*/
+
+static errors PrintFilesData(spu_t* spu){
+    if (!spu) return ERR_NULLPTR_;
+    FILE* logFile = spu->logFile;
+
+    if (logFile == stdout) printf(MAG);
+    fprintf(logFile, "\n");
+    fprintf(logFile, "input file pointer: \t%p\n",  spu->inputFile);
+    fprintf(logFile, "input file name:    \t%s\n",  spu->fileNames->inputFileName);
+
+    fprintf(logFile, "output file pointer:\t%p\n", spu->outputFile);
+    fprintf(logFile, "output file name:   \t%s\n", spu->fileNames->outputFileName);
+
+    fprintf(logFile, "log file pointer:   \t%p\n", spu->logFile);
+    fprintf(logFile, "log file name:      \t%s\n", spu->fileNames->logFileName);
+    fprintf(logFile, "\n");
+    if (logFile == stdout) printf(RESET);
+
+    return OK_;
+}
+
+/*=================================================================*/
+
+static errors ProcessorDump(spu_t* spu){
+    if (!spu->logFile){
+        spu->logFile = stdout;
+        FILE* outputFile = spu->logFile;
+    }
+
+    FILE* logFile = spu->logFile;
+
+    fprintf(logFile, "=================================================\n");
+
+    if (logFile == stdout) printf(GRN);
+    fprintf(logFile, "dump of \"%s\":\n", spu->name);
+    if (logFile == stdout) printf(RESET);
+
+    PrintFilesData(spu);
+
+    //ERRORS:
+    if (logFile == stdout) printf(YEL);
+    switch (spu->errorType){
+
+        case INVALID_VERSION:{
+            fprintf(logFile, "\nError: %lu - invalid version\n\n",  spu->errorType);
+            break;
+        }
+
+        case INVALID_SIGNATURE:{
+            fprintf(logFile, "\nError: %lu - invalid signature\n\n",  spu->errorType);
+            break;
+        }
+
+        default:{
+            fprintf(logFile, "\nError: %lu\n\n",  spu->errorType);
+            break;
+        }
+    }
+    if (logFile == stdout) printf(RESET);
+
+    //STRUCT POLES:
+    if (logFile == stdout) printf(CYN);
+    fprintf(logFile, "Struct pointer:                       \t%p\n",  spu);
+    fprintf(logFile, "Code pointer:                         \t%p\n",  spu->codePointer);
+    fprintf(logFile, "\n");
+    fprintf(logFile, "Number of commands:                   \t%lu\n", spu->numCommands);
+    fprintf(logFile, "Size of command:                      \t%lu\n", spu->sizeCommand);
+    fprintf(logFile, "Allocated memory for commands(bytes): \t%lu\n", spu->memCommandsAllocated);
+    if (logFile == stdout) printf(RESET);
+
+
+    //CODE BUFFER:
+    if (!spu->codePointer){
+
+        if (logFile == stdout) printf(BRED);
+        fprintf(logFile, "spu code does not exist\n");
+        if (logFile == stdout) printf(RESET);
+
+    }
+
+    else{
+        uint64_t* cmdPtr = (uint64_t*)(spu->codePointer);                           // change type
+
+        if (logFile == stdout) printf(GRN);
+        fprintf(logFile, "Commands:\n");
+        if (logFile == stdout) printf(RESET);
+
+        for (size_t ip = 0; ip < MAX_NUM_COMMANDS; ip++){
+
+            fprintf(spu->logFile, "pc<%lu>:\t%lld", ip, *(cmdPtr + ip));
+
+            if (ip == spu->pc){
+                if (spu->logFile == stdout) fprintf(spu->logFile, BRED  "\t\t <---- ded" RESET);
+                else                        fprintf(spu->logFile,       "\t\t <---- ded");
+            }
+
+            fprintf(spu->logFile, "\n");
+        }
+    }
+
+    fprintf(logFile, "---------------------------\n");
+
+    //REGISTERS:
+    if (logFile == stdout) printf(CYN);
+    fprintf(logFile, "Number of registers:                  \t%lu\n", spu->numRegisters);
+    fprintf(logFile, "Size of argument:                     \t%lu\n", spu->sizeArg);
+    fprintf(logFile, "Allocated memory for registers(bytes):\t%lu\n", spu->memRegistersAllocated);
+    if (logFile == stdout) printf(RESET);
+
+    fprintf(logFile, "\n");
+
+    //REGISTERS BUFFER:
+    if (!spu->registersPointer){
+        if (logFile == stdout) printf(BRED);
+        fprintf(logFile, "spu registers do not exist\n");
+        if (logFile == stdout) printf(RESET);
+    }
+
+    else{
+        uint64_t* regPtr = (uint64_t*)(spu->registersPointer);
+
+        if (logFile == stdout) printf(GRN);
+        fprintf(logFile, "Registers:\n");
+        if (logFile == stdout) printf(RESET);
+
+        for (int numReg = 0; numReg < spu->numRegisters; numReg++){
+            fprintf(spu->logFile, "r<%d>:\t%lld\n", numReg, *(regPtr + numReg));
+        }
+    }
+
+
+    fprintf(logFile, "=================================================\n");
+
+    //WAIT USER INPUT
+    if (logFile == stdout) getchar();
+
+    return OK_;
 }
 
 /*=================================================================*/
@@ -182,28 +355,90 @@ void Run(fileNames_t* fileNames){
     spu_t spu = {};
     spu.fileNames = fileNames;
 
-    ProcessorCtor(&spu);
-    fprintf(stderr, "\nmeow\n");
-
-
     bool RunCommands = 1;
-    while (RunCommands){
-        if (spu.pc > 10) break;
-        int64_t* nextArg = (int64_t*)spu.codePointer + spu.pc;
 
-        switch (*nextArg){
+    if (ProcessorCtor(&spu, "1")){
+        ProcessorDump(&spu);
+        RunCommands = 0;
+    }
+
+    ProcessorDump(&spu);
+
+    while (RunCommands){
+        if (spu.pc > MAX_NUM_COMMANDS){
+            RunCommands = 0;
+            ProcessorDump(&spu);
+        }
+
+        char* nextArg = (char*)spu.codePointer + spu.pc * spu.sizeArg;
+        printf("0x%x\n", *nextArg);
+
+        const char OPERATOR_MUSK = 0x0F;
+        switch (*nextArg & OPERATOR_MUSK){
 
             case PUSH:{
-                int64_t num_in = 0;
-                num_in = *(nextArg + 1);
+                char pushVariant = *nextArg & 0xF0;
 
-                StackPush(spu.stk, num_in);
+                switch(pushVariant){
+                    case 0x10:{
+                        int64_t num_in = 0;
+                        num_in = *(nextArg + 1 * spu.sizeCommand);
+
+                        StackPush(spu.stk, num_in);
+
+                        spu.pc += 2;
+                        break;
+                    }
+
+                    case 0x20:{
+                        int64_t num_in = 0, arg_out = 0;
+                        num_in  = *(nextArg + 1 * spu.sizeCommand);
+                        arg_out = *((int64_t*)spu.registersPointer + num_in - 1);
+
+                        StackPush(spu.stk, arg_out);
+
+                        spu.pc += 2;
+                        break;
+                    }
+
+                    case 0x30:{
+                        int64_t frst_num_in = 0, arg_out = 0, scnd_num_in = 0, num_reg = 0;
+
+                        frst_num_in = *(nextArg + 1 * spu.sizeArg);
+                        num_reg     = *((int64_t*)spu.registersPointer + frst_num_in - 1);
+
+                        scnd_num_in = *(nextArg + 2 * spu.sizeArg);
+
+                        arg_out = num_reg + scnd_num_in;
+                        StackPush(spu.stk, arg_out);
+
+                        spu.pc += 3;
+                        break;
+                    }
+
+                    default:{
+
+                        break;
+                    }
+                }
+
+                break;
+            }
+
+            case POP:{
+                int64_t first_arg = 0, frst_num_in = 0, num_reg = 0;
+
+                frst_num_in = *(nextArg + 1 * spu.sizeCommand);
+
+                StackPop(spu.stk, &first_arg);
+
+                *((int64_t*)spu.registersPointer + frst_num_in - 1) = first_arg;
 
                 spu.pc += 2;
                 break;
             }
 
-            case ADD :{
+            case ADD:{
                 int64_t num_first = 0, num_second = 0;
 
                 StackPop(spu.stk, &num_first);
@@ -215,7 +450,7 @@ void Run(fileNames_t* fileNames){
                 break;
             }
 
-            case SUB :{
+            case SUB:{
                 int64_t positive = 0, negative = 0;
 
                 StackPop(spu.stk, &positive);
@@ -227,7 +462,7 @@ void Run(fileNames_t* fileNames){
                 break;
             }
 
-            case MUL :{
+            case MUL:{
                 int64_t num_first = 0, num_second = 0;
 
                 StackPop(spu.stk, &num_first);
@@ -239,7 +474,7 @@ void Run(fileNames_t* fileNames){
                 break;
             }
 
-            case DIV :{
+            case DIV:{
                 int64_t numerator = 0, divisor = 0;
 
                 StackPop(spu.stk, &numerator);
@@ -251,7 +486,7 @@ void Run(fileNames_t* fileNames){
                 break;
             }
 
-            case SQRT :{
+            case SQRT:{
                 int64_t num = 0;
 
                 StackPop(spu.stk, &num);
@@ -264,7 +499,7 @@ void Run(fileNames_t* fileNames){
                 break;
             }
 
-            case SIN :{
+            case SIN:{
                 int64_t num = 0;
 
                 StackPop(spu.stk, &num);
@@ -277,7 +512,7 @@ void Run(fileNames_t* fileNames){
                 break;
             }
 
-            case COS :{
+            case COS:{
                 int64_t num = 0;
 
                 StackPop(spu.stk, &num);
@@ -290,12 +525,12 @@ void Run(fileNames_t* fileNames){
                 break;
             }
 
-            case OUT :{
+            case OUT:{
                 int64_t num_out = 0;
 
                 StackPop(spu.stk, &num_out);
 
-                printf(MAG "%lld\n" RESET, num_out);
+                fprintf(spu.outputFile, "%lld\n", num_out);
 
                 spu.pc++;
                 break;
@@ -313,21 +548,22 @@ void Run(fileNames_t* fileNames){
                 break;
             }
 
-            case DUMP :{
+            case DUMP:{
+                ProcessorDump(&spu);
                 StackDump(spu.stk);
 
                 spu.pc++;
                 break;
             }
 
-            case HLT :{
+            case HLT:{
                 RunCommands = 0;
 
                 spu.pc++;
                 break;
             }
 
-            default  :{
+            default :{
                 printf(RED "\nERROR\n" RESET);
 
                 spu.pc++;

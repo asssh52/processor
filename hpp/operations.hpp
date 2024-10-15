@@ -2,6 +2,7 @@
 
 const size_t MAX_NUM_COMMANDS = 16;
 const size_t SIZE_COMMAND = 8;
+const size_t SIZE_ARG = 8;
 
 enum operations{
     PUSH =  1,
@@ -10,12 +11,13 @@ enum operations{
     MUL  =  4,
     DIV  =  5,
 
-    SQRT =  10,
-    SIN  =  11,
-    COS  =  12,
+    SQRT =  6,
+    SIN  =  7,
+    COS  =  8,
 
-    OUT  =  20,
-    IN   =  21,
-    DUMP =  22,
-    HLT  = -1,
+    POP  =  9,
+    OUT  =  10,
+    IN   =  11,
+    DUMP =  12,
+    HLT  =  15,
 };

@@ -1,5 +1,7 @@
 push 10
+pop ax
+push ax
 push 20
-sqrt
+sub
 out
 hlt

@@ -2,7 +2,8 @@
 
 enum errors{
     OK = 0,
-    ERR_NULLPTR = 1
+    ERR_NULLPTR = 1,
+    ERR = 2
 };
 
 typedef struct fileNames{

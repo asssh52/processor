@@ -19,7 +19,7 @@ all: run
 compile: ./bin/compiler.o
 	$(CXX) ./bin/compiler.o $(CXXFLAGS) -o compile
 
-./bin/compiler.o: ./src/compiler.cpp ./hpp/compiler.hpp
+./bin/compiler.o: ./src/compiler.cpp ./hpp/compiler.hpp ./hpp/operations.hpp
 	$(CXX) -c ./src/compiler.cpp $(CXXFLAGS) -o ./bin/compiler.o
 
 run:       ./bin/processor.o ./mystack/mystack.o
@@ -28,7 +28,7 @@ run:       ./bin/processor.o ./mystack/mystack.o
 ./mystack/mystack.o: ../mystack/mystack.cpp
 	$(CXX) -c        ../mystack/mystack.cpp $(CXXFLAGS) -o ./bin/mystack.o
 
-./bin/processor.o:        src/processor.cpp hpp/processor.hpp
+./bin/processor.o:        src/processor.cpp hpp/processor.hpp ./hpp/operations.hpp
 	$(CXX) -c           ./src/processor.cpp $(CXXFLAGS) -o ./bin/processor.o
 
 clean:
