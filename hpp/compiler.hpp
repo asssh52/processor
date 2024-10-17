@@ -3,7 +3,12 @@
 enum errors{
     OK = 0,
     ERR_NULLPTR = 1,
-    ERR = 2
+    ERR = -666
+};
+
+enum checkMarkParams{
+    FROM_CODE = 0,
+    FROM_FUNC = 1
 };
 
 typedef struct fileNames{
@@ -14,10 +19,16 @@ typedef struct fileNames{
 } fileNames_t;
 
 typedef struct label{
-    const char name[16];
-    size_t addr;
+    char    name[64];
+    int64_t  addr;
 
 } label_t;
+
+typedef struct fixup{
+    int64_t  codeAdr;
+    int64_t  labelNum;
+
+} fixup_t;
 
 typedef struct commands{
     const char*     name;
@@ -27,12 +38,18 @@ typedef struct commands{
     size_t          sizeArg;
     size_t          sizeAllocated;
 
-    void*           labelsPointer;
-    size_t          sizeLabels;
+    size_t          pc;
 
+    void*           labelsPointer;
+    size_t          numLabels;
+    size_t          labelsOccupied;
+
+    void*           fixupPointer;
+    size_t          sizeFixup;
+    size_t          numElemsFixup;
 
     fileNames_t*    fileNames;
     FILE*           logFile;
     FILE*           inputFile;
     FILE*           outputFile;
-} commands;
+} commands_t;

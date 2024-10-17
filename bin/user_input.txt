@@ -1,3 +1,11 @@
-push 15
+push 52
+jmp a:
+jmp b:
+jmp c:
+push 1
+a:
+b:
+c:
+
 out
 hlt
