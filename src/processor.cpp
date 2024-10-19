@@ -13,6 +13,13 @@ const int REGISTER_NUM = 4;
 const char* SIGNATURE = "meow";
 const char* VERSION = "v.4";
 
+typedef struct header{
+
+    uint64_t signature;
+    uint64_t version;
+    uint64_t size;
+
+} header_t;
 
 typedef struct fileNames{
 
@@ -26,14 +33,15 @@ typedef struct spu{
     const char*     name;
 
     Stack_t*        stk;
+    Stack_t*        returnStack;
     void*           codePointer;
     void*           registersPointer;
 
     size_t          pc;
-    size_t          sizeCommand;
-    size_t          sizeArg;
+
     size_t          numCommands;
     size_t          memCommandsAllocated;
+
     size_t          numRegisters;
     size_t          memRegistersAllocated;
 
@@ -47,11 +55,11 @@ typedef struct spu{
 } spu_t;
 
 enum errors{
-    OK_ = 0,
-    ERR_NULLPTR_ = 1,
-    ERR_ = 2,
-    INVALID_VERSION = 3,
-    INVALID_SIGNATURE = 4
+    OK_                 = 0,
+    ERR_NULLPTR_        = 1,
+    ERR_                = 2,
+    INVALID_VERSION     = 3,
+    INVALID_SIGNATURE   = 4
 };
 
 void Run(fileNames_t* fileNames);
@@ -72,6 +80,7 @@ int main(int argc, const char *argv[]){
     fileNames.outputFileName = (argc == 3) ? argv[2]  : "stdout";
     //fileNames.logFileName    = "meow.txt";
     fileNames.outputFileName   = "meow.txt";
+
     Run(&fileNames);
 
     return 0;
@@ -98,24 +107,24 @@ static errors ProcessorCtor(spu_t* spu, const char* name){
     spu->logFile    = fopen(spu->fileNames->logFileName,    "w");
     if (spu->logFile    == nullptr)     spu->logFile = stdout;
 
-    //INITIALIZE STACK:
-    spu->stk = (Stack_t*)calloc(sizeof(Stack_t), 1);
+    //INITIALIZE STACKS:
+    spu->stk            = (Stack_t*)calloc(sizeof(Stack_t), 1);
+    spu->returnStack    = (Stack_t*)calloc(sizeof(Stack_t), 1);
     StackCtor(spu->stk);                                             // check if allocated
+    StackCtor(spu->returnStack);
 
     //FILL STRUCTURE FIELDS:
     spu->numRegisters   = REGISTER_NUM;
     spu->numCommands    = MAX_NUM_COMMANDS;
-    spu->sizeCommand    = SIZE_COMMAND;
-    spu->sizeArg        = SIZE_ARG;
     spu->pc = 0;
 
     //INITIALIZE CODE BUFFER:
-    spu->codePointer                = calloc(spu->sizeCommand, spu->numCommands); // check if allocated
-    spu->memCommandsAllocated       = spu->sizeCommand * spu->numCommands;
+    spu->codePointer                = calloc(SIZE_COMMAND, spu->numCommands); // check if allocated
+    spu->memCommandsAllocated       = SIZE_COMMAND * spu->numCommands;
 
     //INITIALIZE REGISTER BUFFER:
-    spu->registersPointer           = calloc(spu->sizeArg, spu->numRegisters);
-    spu->memRegistersAllocated      = spu->sizeArg * spu->numRegisters;
+    spu->registersPointer           = calloc(SIZE_ARG, spu->numRegisters);
+    spu->memRegistersAllocated      = SIZE_ARG * spu->numRegisters;
 
     //VERIFY CODE:
     if (CheckSignature(spu)) return ERR_;
@@ -138,7 +147,7 @@ static errors ProcessorDtor(spu_t* spu){
     if(!spu->logFile    && spu->logFile != stdout)      fclose(spu->logFile);
 
     free(spu->codePointer);
-    free(spu->registersPointer);
+    free(spu->registersPointer);    //stack free
     StackDtor(spu->stk);
 
     spu->memCommandsAllocated   = 0;
@@ -275,7 +284,7 @@ static errors ProcessorDump(spu_t* spu){
     fprintf(logFile, "Code pointer:                         \t%p\n",  spu->codePointer);
     fprintf(logFile, "\n");
     fprintf(logFile, "Number of commands:                   \t%lu\n", spu->numCommands);
-    fprintf(logFile, "Size of command:                      \t%lu\n", spu->sizeCommand);
+    fprintf(logFile, "Size of command:                      \t%lu\n", SIZE_COMMAND);
     fprintf(logFile, "Allocated memory for commands(bytes): \t%lu\n", spu->memCommandsAllocated);
     if (logFile == stdout) printf(RESET);
 
@@ -314,7 +323,7 @@ static errors ProcessorDump(spu_t* spu){
     //REGISTERS:
     if (logFile == stdout) printf(CYN);
     fprintf(logFile, "Number of registers:                  \t%lu\n", spu->numRegisters);
-    fprintf(logFile, "Size of argument:                     \t%lu\n", spu->sizeArg);
+    fprintf(logFile, "Size of argument:                     \t%lu\n", SIZE_ARG);
     fprintf(logFile, "Allocated memory for registers(bytes):\t%lu\n", spu->memRegistersAllocated);
     if (logFile == stdout) printf(RESET);
 
@@ -365,24 +374,26 @@ void Run(fileNames_t* fileNames){
     ProcessorDump(&spu);
 
     while (RunCommands){
+        ProcessorDump(&spu);
+
         if (spu.pc > MAX_NUM_COMMANDS){
             RunCommands = 0;
             ProcessorDump(&spu);
         }
 
-        char* nextArg = (char*)spu.codePointer + spu.pc * spu.sizeArg;
+        char* nextArg = (char*)spu.codePointer + spu.pc * SIZE_ARG;
         printf("0x%x\n", *nextArg);
 
-        const char OPERATOR_MUSK = 0x0F;
+        const char OPERATOR_MUSK = 0b00011111;
         switch (*nextArg & OPERATOR_MUSK){
 
             case PUSH:{
-                char pushVariant = *nextArg & 0xF0;
+                char pushVariant = *nextArg & 0b11100000;
 
                 switch(pushVariant){
-                    case 0x10:{
+                    case 0x20:{
                         int64_t num_in = 0;
-                        num_in = *(nextArg + 1 * spu.sizeCommand);
+                        num_in = *(nextArg + 1 * SIZE_COMMAND);
 
                         StackPush(spu.stk, num_in);
 
@@ -390,9 +401,9 @@ void Run(fileNames_t* fileNames){
                         break;
                     }
 
-                    case 0x20:{
+                    case 0x40:{
                         int64_t num_in = 0, arg_out = 0;
-                        num_in  = *(nextArg + 1 * spu.sizeCommand);
+                        num_in  = *(nextArg + 1 * SIZE_COMMAND);
                         arg_out = *((int64_t*)spu.registersPointer + num_in - 1);
 
                         StackPush(spu.stk, arg_out);
@@ -401,13 +412,13 @@ void Run(fileNames_t* fileNames){
                         break;
                     }
 
-                    case 0x30:{
+                    case 0x60:{
                         int64_t frst_num_in = 0, arg_out = 0, scnd_num_in = 0, num_reg = 0;
 
-                        frst_num_in = *(nextArg + 1 * spu.sizeArg);
+                        frst_num_in = *(nextArg + 1 * SIZE_ARG);
                         num_reg     = *((int64_t*)spu.registersPointer + frst_num_in - 1);
 
-                        scnd_num_in = *(nextArg + 2 * spu.sizeArg);
+                        scnd_num_in = *(nextArg + 2 * SIZE_ARG);
 
                         arg_out = num_reg + scnd_num_in;
                         StackPush(spu.stk, arg_out);
@@ -428,7 +439,7 @@ void Run(fileNames_t* fileNames){
             case POP:{
                 int64_t first_arg = 0, frst_num_in = 0, num_reg = 0;
 
-                frst_num_in = *(nextArg + 1 * spu.sizeCommand);
+                frst_num_in = *(nextArg + 1 * SIZE_COMMAND);
 
                 StackPop(spu.stk, &first_arg);
 
@@ -559,7 +570,7 @@ void Run(fileNames_t* fileNames){
             case JMP:{
                 int64_t num_arg = 0;
 
-                num_arg = *(nextArg + 1 * spu.sizeCommand);
+                num_arg = *(nextArg + 1 * SIZE_COMMAND);
 
                 spu.pc = num_arg;
 
@@ -569,7 +580,7 @@ void Run(fileNames_t* fileNames){
             case JA:{
                 int64_t num_arg = 0, first_arg = 0, second_arg = 0;
 
-                num_arg = *(nextArg + 1 * spu.sizeCommand);
+                num_arg = *(nextArg + 1 * SIZE_COMMAND);
 
                 StackPop(spu.stk, &first_arg);
                 StackPop(spu.stk, &second_arg);
@@ -587,6 +598,23 @@ void Run(fileNames_t* fileNames){
                 }
             }
 
+            case CALL:{
+                int64_t jump_to = 0;
+                jump_to = *(nextArg + 1 * SIZE_COMMAND);
+                StackPush(spu.returnStack, spu.pc);
+
+                spu.pc = jump_to;
+                break;
+            }
+
+            case RET:{
+                int64_t num_arg = -1;
+                StackPop(spu.returnStack, &num_arg);
+
+                spu.pc = num_arg + 2;
+                break;
+            }
+
             case HLT:{
                 RunCommands = 0;
 
@@ -595,7 +623,7 @@ void Run(fileNames_t* fileNames){
             }
 
             default :{
-                printf(RED "\nERROR\n" RESET);
+                printf(RED "\nERROR:pc=%d\n" RESET, spu.pc);
 
                 spu.pc++;
                 break;

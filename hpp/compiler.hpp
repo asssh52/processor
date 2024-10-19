@@ -35,16 +35,18 @@ typedef struct commands{
 
     void*           codePointer;
     size_t          numCommands;
-    size_t          sizeArg;
     size_t          sizeAllocated;
+
+    size_t          maxLines;
+    size_t          numLines;
 
     size_t          pc;
 
-    void*           labelsPointer;
-    size_t          numLabels;
-    size_t          labelsOccupied;
+    label_t*        labelsPointer;      //приведение типа
+    size_t          sizeLabels;
+    size_t          numElemsLabels;
 
-    void*           fixupPointer;
+    fixup_t*        fixupPointer;
     size_t          sizeFixup;
     size_t          numElemsFixup;
 

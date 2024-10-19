@@ -22,4 +22,7 @@ enum operations{
     JMP  =  13,
     JA   =  14,
     HLT  =  15,
+
+    CALL =  16,
+    RET  =  17
 };

@@ -10,6 +10,7 @@
 const char* SIGNATURE = "meow";
 const int VERSION = 4;
 
+const size_t MAX_LINES  = 32;
 const size_t NUM_LABELS = 8;
 const size_t NUM_FIXUP  = 8;
 
@@ -75,21 +76,21 @@ static errors CommandsCtor(commands_t* codeStruct, const char* name){
     codeStruct->logFile     = logFile;
     //files
 
-    codeStruct->numCommands = MAX_NUM_COMMANDS;                                         //count commands
-    codeStruct->sizeArg     = SIZE_COMMAND;
+    codeStruct->numCommands     = MAX_NUM_COMMANDS;                                         //count commands
+    codeStruct->maxLines        = MAX_LINES;
 
     codeStruct->name = name;
-    codeStruct->codePointer     = calloc(codeStruct->sizeArg, codeStruct->numCommands);     //exception nlptr = calloc
-    codeStruct->sizeAllocated   = codeStruct->numCommands * codeStruct->sizeArg;
+    codeStruct->codePointer     = calloc(SIZE_ARG, codeStruct->numCommands);     //exception nlptr = calloc
+    codeStruct->sizeAllocated   = codeStruct->numCommands * SIZE_ARG;
 
     codeStruct->numElemsFixup   = 0;
     codeStruct->sizeFixup       = NUM_FIXUP;
-    codeStruct->fixupPointer    = calloc(sizeof(fixup_t), codeStruct->sizeFixup);
+    codeStruct->fixupPointer    = (fixup_t*)calloc(sizeof(fixup_t), codeStruct->sizeFixup);
     FillFixups(codeStruct);
 
-    codeStruct->numLabels       = NUM_LABELS;
-    codeStruct->labelsOccupied  = 0;
-    codeStruct->labelsPointer   = calloc(sizeof(label_t), codeStruct->numLabels);
+    codeStruct->sizeLabels      = NUM_LABELS;
+    codeStruct->numElemsLabels  = 0;
+    codeStruct->labelsPointer   = (label_t*)calloc(sizeof(label_t), codeStruct->sizeLabels);
     FillLabels(codeStruct);
 
     return OK;
@@ -132,7 +133,7 @@ static errors CommandsDump(commands_t* codeStruct){
     fprintf(logFile, "Struct pointer:                       \t%p\n",  codeStruct);
     fprintf(logFile, "Code pointer:                         \t%p\n",  codeStruct->codePointer);
     fprintf(logFile, "Number of commands:                   \t%lu\n", codeStruct->numCommands);
-    fprintf(logFile, "Size of command:                      \t%lu\n", codeStruct->sizeArg);
+    fprintf(logFile, "Size of command:                      \t%lu\n", SIZE_ARG);
     fprintf(logFile, "Allocated memory for commands(bytes): \t%lu\n", codeStruct->sizeAllocated);
     if (logFile == stdout) printf(RESET);
 
@@ -148,11 +149,11 @@ static errors CommandsDump(commands_t* codeStruct){
     //LABEL DATA:
     if (logFile == stdout) printf(BLU);
     fprintf(logFile, "Label data.\n");
-    fprintf(logFile, "Label pointer:\t\t%p\n",    codeStruct->labelsPointer);
-    fprintf(logFile, "Number of labels:\t%lu\n", codeStruct->numLabels);
+    fprintf(logFile, "Label pointer:\t\t%p\n",  codeStruct->labelsPointer);
+    fprintf(logFile, "Size of labels:\t%lu\n",  codeStruct->sizeLabels);
 
-    label_t* labelsPtr = (label_t*)codeStruct->labelsPointer;
-    for (int i = 0; i < codeStruct->numLabels; i++){
+    label_t* labelsPtr = codeStruct->labelsPointer;
+    for (int i = 0; i < codeStruct->sizeLabels; i++){
         fprintf(logFile, "[label:%d], name:<%s>, addr:%lld\n", i, (labelsPtr + i)->name, (labelsPtr + i)->addr);
     }
     if (logFile == stdout) printf(RESET);
@@ -164,11 +165,11 @@ static errors CommandsDump(commands_t* codeStruct){
     //FIXUP:
     if (logFile == stdout) printf(CYN);
     fprintf(logFile, "Fixup data.\n");
-    fprintf(logFile, "Fixup pointer:\t\t%p\n",            codeStruct->fixupPointer);
-    fprintf(logFile, "Max number of fixups:\t%lu\n",    codeStruct->sizeFixup);
+    fprintf(logFile, "Fixup pointer:\t\t%p\n",          codeStruct->fixupPointer);
+    fprintf(logFile, "Size of fixups:\t%lu\n",          codeStruct->sizeFixup);
     fprintf(logFile, "Number of fixups:\t%lu\n",        codeStruct->numElemsFixup);
 
-    fixup_t* fixupsPtr = (fixup_t*)codeStruct->fixupPointer;
+    fixup_t* fixupsPtr = codeStruct->fixupPointer;
     for (int i = 0; i < codeStruct->sizeFixup; i++){
         fprintf(logFile, "[fixup:%d], label name:<%lld>, code addr:%lld\n",
                                  i, (fixupsPtr + i)->labelNum, (fixupsPtr + i)->codeAdr);
@@ -190,6 +191,8 @@ static errors CommandsDump(commands_t* codeStruct){
             fprintf(codeStruct->logFile, "pc<%lu>:\t%lld\n", pc, *(cmdPtr + pc));
     }
     fprintf(logFile, "=================================================\n");
+
+    if (logFile == stdout) getchar();
 
     return OK;
 }
@@ -236,6 +239,7 @@ int CheckMark(commands_t* codeStruct, char* arg, checkMarkParams param){        
 
     char* ptr = strchr(arg, ':');
     int hasMark = (ptr)? 1:0;
+    printf(BRED "%s\n" RESET, arg);
 
     if (param == FROM_CODE){
         if (hasMark){
@@ -243,18 +247,16 @@ int CheckMark(commands_t* codeStruct, char* arg, checkMarkParams param){        
             int labelNum = FindLabel(codeStruct, arg);
 
             if (labelNum == -1){
-                size_t lblsNumOccupied = codeStruct->labelsOccupied;
+                strcpy((codeStruct->labelsPointer + codeStruct->numElemsLabels)->name, arg);
+                       (codeStruct->labelsPointer + codeStruct->numElemsLabels)->addr  = codeStruct->pc;
 
-                strcpy(((label_t*)codeStruct->labelsPointer + lblsNumOccupied)->name, arg);
-                       ((label_t*)codeStruct->labelsPointer + lblsNumOccupied)->addr  = codeStruct->pc;
-
-                codeStruct->labelsOccupied++;
+                codeStruct->numElemsLabels++;
 
                 return hasMark;
             }
 
             else{
-                ((label_t*)codeStruct->labelsPointer + labelNum)->addr  = codeStruct->pc;
+                (codeStruct->labelsPointer + labelNum)->addr  = codeStruct->pc;
 
                 return hasMark;
             }
@@ -267,25 +269,23 @@ int CheckMark(commands_t* codeStruct, char* arg, checkMarkParams param){        
             int labelNum = FindLabel(codeStruct, arg);
 
             if (labelNum == -1){
-                size_t lblsNumOccupied = codeStruct->labelsOccupied;
-
-                strcpy(((label_t*)codeStruct->labelsPointer + lblsNumOccupied)->name, arg);
-                ((label_t*)codeStruct->labelsPointer + lblsNumOccupied)->addr  = -1;
+                strcpy((codeStruct->labelsPointer + codeStruct->numElemsLabels)->name, arg);
+                (codeStruct->labelsPointer + codeStruct->numElemsLabels)->addr  = -1;
 
 
 
                 //FIXUP:
-                fixup_t* fxp_ptr = (fixup_t*)codeStruct->fixupPointer;
+                fixup_t* fxp_ptr = codeStruct->fixupPointer;
 
-                (fxp_ptr + codeStruct->numElemsFixup)->labelNum = codeStruct->labelsOccupied;
+                (fxp_ptr + codeStruct->numElemsFixup)->labelNum = codeStruct->numElemsLabels;
                 (fxp_ptr + codeStruct->numElemsFixup)->codeAdr  = codeStruct->pc + 1;
-                codeStruct->labelsOccupied++;
+                codeStruct->numElemsLabels++;
                 codeStruct->numElemsFixup++;
                 return -1;
             }
 
             else{
-                return ((label_t*)codeStruct->labelsPointer + labelNum)->addr;
+                return (codeStruct->labelsPointer + labelNum)->addr;
             }
         }
 
@@ -295,7 +295,7 @@ int CheckMark(commands_t* codeStruct, char* arg, checkMarkParams param){        
     }
 
     else{
-        return ERR;
+        return hasMark;
     }
 
     return ERR;
@@ -305,8 +305,8 @@ int CheckMark(commands_t* codeStruct, char* arg, checkMarkParams param){        
 
 static int FindLabel(commands_t* codeStruct, char* arg){
 
-    for (int i = 0; i < codeStruct->numLabels; i++){
-        if (!strcmp(((label_t*)codeStruct->labelsPointer + i)->name, arg)){
+    for (int i = 0; i < codeStruct->numElemsLabels; i++){
+        if (!strcmp((codeStruct->labelsPointer + i)->name, arg)){
             return i;
         }
     }
@@ -318,9 +318,9 @@ static int FindLabel(commands_t* codeStruct, char* arg){
 
 static errors FillLabels(commands_t* codeStruct){
 
-    for (int i = 0; i < codeStruct->numLabels; i++){
-        ((label_t*)codeStruct->labelsPointer + i)->addr = -666;
-        strcpy(((label_t*)codeStruct->labelsPointer + i)->name, "meow");
+    for (int i = 0; i < codeStruct->sizeLabels; i++){
+        (codeStruct->labelsPointer + i)->addr = -666;
+        strcpy((codeStruct->labelsPointer + i)->name, "meow");
     }
 
     return OK;
@@ -331,8 +331,8 @@ static errors FillLabels(commands_t* codeStruct){
 static errors FillFixups(commands_t* codeStruct){
 
     for (int i = 0; i < codeStruct->sizeFixup; i++){
-        ((fixup_t*)codeStruct->fixupPointer + i)->  codeAdr = -666;
-        ((fixup_t*)codeStruct->fixupPointer + i)->labelNum  = -666;
+        (codeStruct->fixupPointer + i)->  codeAdr = -666;
+        (codeStruct->fixupPointer + i)->labelNum  = -666;
     }
 
     return OK;
@@ -343,10 +343,10 @@ static errors FillFixups(commands_t* codeStruct){
 static errors FixCode(commands_t* codeStruct){
 
     for (int i = 0; i < codeStruct->numElemsFixup; i++){
-        int64_t  codeAddr    = ((fixup_t*)codeStruct->fixupPointer + i)->codeAdr;
-        int64_t  labelNum    = ((fixup_t*)codeStruct->fixupPointer + i)->labelNum;
+        int64_t  codeAddr    = (codeStruct->fixupPointer + i)->codeAdr;
+        int64_t  labelNum    = (codeStruct->fixupPointer + i)->labelNum;
 
-        int64_t codeArgChangeTo   = ((label_t*)codeStruct->labelsPointer + labelNum)->addr;
+        int64_t codeArgChangeTo   = (codeStruct->labelsPointer + labelNum)->addr;
 
         *((int64_t*)codeStruct->codePointer + codeAddr) = codeArgChangeTo;                              //int64_t!!
     }
@@ -355,6 +355,21 @@ static errors FixCode(commands_t* codeStruct){
 }
 
 /*=======================================================================*/
+
+static int64_t GetArg(commands_t* codeStruct){
+    int64_t arg         = 0;
+    char    arg_ch[64]  = "";
+        if (!fscanf(codeStruct->inputFile,  "%lld", &arg)){
+            fscanf(codeStruct->inputFile,   "%s", arg_ch);
+
+            arg = CheckMark(codeStruct, arg_ch, FROM_FUNC);
+        }
+
+    return arg;
+}
+
+/*=======================================================================*/
+
 static void Compile(fileNames_t* fileNames){
     commands_t codeStruct = {};
     codeStruct.fileNames = fileNames;
@@ -374,6 +389,7 @@ static void Compile(fileNames_t* fileNames){
         char cmd[128] = "";
         fscanf(inputFile, "%s", cmd);
 
+
         if (!strcmp(cmd, "push")){
             int64_t arg         = 0;
             int64_t arg2        = 0;
@@ -385,7 +401,7 @@ static void Compile(fileNames_t* fileNames){
                 int secondArgExist =    fscanf(inputFile, " + %lld", &arg2);
 
                 if (!secondArgExist){
-                    *((int64_t*)codeStruct.codePointer + codeStruct.pc)     = 0x21;
+                    *((int64_t*)codeStruct.codePointer + codeStruct.pc)     = 0b01000001;
 
                     arg = FindRegisterName(reg_name);
 
@@ -395,7 +411,7 @@ static void Compile(fileNames_t* fileNames){
                 }
 
                 else{
-                    *((int64_t*)codeStruct.codePointer + codeStruct.pc)     = 0x31;
+                    *((int64_t*)codeStruct.codePointer + codeStruct.pc)     = 0b01100001;
 
                     arg = FindRegisterName(reg_name);
 
@@ -408,7 +424,7 @@ static void Compile(fileNames_t* fileNames){
 
             else{
 
-                *((int64_t*)codeStruct.codePointer + codeStruct.pc)     = 0x11;
+                *((int64_t*)codeStruct.codePointer + codeStruct.pc)     = 0b00100001;
                 *((int64_t*)codeStruct.codePointer + codeStruct.pc + 1) = arg;
 
                 codeStruct.pc += 2;
@@ -483,13 +499,7 @@ static void Compile(fileNames_t* fileNames){
             *((uint64_t*)codeStruct.codePointer + codeStruct.pc) = JMP;
 
             //fixup
-            int64_t arg         = 0;
-            char    arg_ch[64]  = "";
-            if (!fscanf(inputFile, "%lld", &arg)){
-                fscanf(inputFile, "%s", arg_ch);
-
-                arg = CheckMark(&codeStruct, arg_ch, FROM_FUNC);
-            }
+            int64_t arg = GetArg(&codeStruct);
             //fixup
 
             *((uint64_t*)codeStruct.codePointer + codeStruct.pc + 1) = arg;
@@ -500,13 +510,7 @@ static void Compile(fileNames_t* fileNames){
             *((uint64_t*)codeStruct.codePointer + codeStruct.pc) = JA;
 
             //fixup
-            int64_t arg         = 0;
-            char    arg_ch[64]  = "";
-            if (!fscanf(inputFile, "%lld", &arg)){
-                fscanf(inputFile, "%s", arg_ch);
-
-                arg = CheckMark(&codeStruct, arg_ch, FROM_FUNC);
-            }
+            int64_t arg = GetArg(&codeStruct);
             //fixup
 
             *((uint64_t*)codeStruct.codePointer + codeStruct.pc + 1) = arg;
@@ -516,7 +520,20 @@ static void Compile(fileNames_t* fileNames){
         else if (!strcmp(cmd, "hlt")){
             *((uint64_t*)codeStruct.codePointer + codeStruct.pc) = HLT;
             codeStruct.pc++;
-            RunCommands = 0;
+        }
+
+        else if (!strcmp(cmd, "call")){
+            *((uint64_t*)codeStruct.codePointer + codeStruct.pc) = CALL;
+            int64_t arg = GetArg(&codeStruct);
+            //fixup
+
+            *((uint64_t*)codeStruct.codePointer + codeStruct.pc + 1) = arg;
+            codeStruct.pc += 2;
+        }
+
+        else if (!strcmp(cmd, "ret")){
+            *((uint64_t*)codeStruct.codePointer + codeStruct.pc) = RET;
+            codeStruct.pc++;
         }
 
         else{
@@ -525,6 +542,10 @@ static void Compile(fileNames_t* fileNames){
                 *((uint64_t*)codeStruct.codePointer + codeStruct.pc) = ERR; //!!!
             }
         }
+
+        if (codeStruct.numLines >= codeStruct.maxLines) RunCommands = 0;
+        codeStruct.numLines++;
+
     }
 
     FixCode(&codeStruct);
