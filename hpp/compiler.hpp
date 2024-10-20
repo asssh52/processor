@@ -18,6 +18,11 @@ typedef struct fileNames{
 
 } fileNames_t;
 
+typedef struct string{
+    size_t size;
+    char*  addr;
+} string_t;
+
 typedef struct label{
     char    name[64];
     int64_t  addr;
@@ -42,13 +47,18 @@ typedef struct commands{
 
     size_t          pc;
 
-    label_t*        labelsPointer;      //приведение типа
+    label_t*        labelsPointer;
     size_t          sizeLabels;
     size_t          numElemsLabels;
 
     fixup_t*        fixupPointer;
     size_t          sizeFixup;
     size_t          numElemsFixup;
+
+    void*           fileBuffer;
+    size_t          sizeFileBuffer;
+    string_t*       splittedInput;
+    size_t          numSplitted;
 
     fileNames_t*    fileNames;
     FILE*           logFile;

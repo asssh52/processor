@@ -1,6 +1,6 @@
 #pragma once
 
-const size_t MAX_NUM_COMMANDS = 32;
+const size_t MAX_NUM_COMMANDS = 64;
 const size_t SIZE_COMMAND = 8;
 const size_t SIZE_ARG = 8;
 

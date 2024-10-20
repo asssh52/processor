@@ -1,6 +1,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
+#include <sys/stat.h>
 #include "../hpp/colors.hpp"
 #include "../hpp/compiler.hpp"
 #include "../hpp/operations.hpp"
@@ -10,7 +11,7 @@
 const char* SIGNATURE = "meow";
 const int VERSION = 4;
 
-const size_t MAX_LINES  = 32;
+const size_t MAX_LINES  = 64;
 const size_t NUM_LABELS = 8;
 const size_t NUM_FIXUP  = 8;
 
@@ -18,6 +19,7 @@ static void     Compile     (fileNames_t*   fileNames);
 static errors   FillLabels  (commands_t*    codeStruct);
 static errors   FillFixups  (commands_t*    codeStruct);
 static int      FindLabel   (commands_t*    codeStruct, char* arg);
+static errors   SplitCode   (commands_t*    codeStruct);
 
 int main(int argc, const char* argv[]){
     fileNames_t fileNames= {};
@@ -76,8 +78,22 @@ static errors CommandsCtor(commands_t* codeStruct, const char* name){
     codeStruct->logFile     = logFile;
     //files
 
-    codeStruct->numCommands     = MAX_NUM_COMMANDS;                                         //count commands
+    codeStruct->numCommands     = MAX_NUM_COMMANDS;                   //change                             //count commands
     codeStruct->maxLines        = MAX_LINES;
+
+    struct stat st;                                                   //change!
+    stat(defaultFileNameIn, &st);
+    size_t inputFileSize = st.st_size;
+
+    printf(BBLU "%lu\n" RESET, inputFileSize);
+
+    codeStruct->fileBuffer      = calloc(1, inputFileSize);
+    codeStruct->sizeFileBuffer  = inputFileSize;
+    codeStruct->splittedInput   = (string_t*)calloc(sizeof(string_t), MAX_LINES + 1);
+    codeStruct->numSplitted    = 0;
+
+    fread(codeStruct->fileBuffer, 1, codeStruct->sizeFileBuffer, inputFile);
+    SplitCode(codeStruct);
 
     codeStruct->name = name;
     codeStruct->codePointer     = calloc(SIZE_ARG, codeStruct->numCommands);     //exception nlptr = calloc
@@ -179,6 +195,15 @@ static errors CommandsDump(commands_t* codeStruct){
 
     fprintf(logFile, "\n");
 
+    //SPLITTED:
+    if (logFile == stdout) printf(BLU);
+    fprintf(logFile, "Splitted code:\n");
+    for (int i = 0; i < codeStruct->numSplitted; i++){
+        printf("i:%d - \t%p \t size:%lu\n", i + 1, (codeStruct->splittedInput)[i].addr, (codeStruct->splittedInput)[i].size);
+    }
+    if (logFile == stdout) printf(RESET);
+
+    fprintf(logFile, "\n");
 
     //COMMANDS:
     int64_t* cmdPtr = (int64_t*)(codeStruct->codePointer);                           // change type
@@ -227,7 +252,7 @@ static errors OutputCode(commands_t* codeStruct){
 
 /*=======================================================================*/
                                                                                 //capital letters
-int FindRegisterName(char arg[3]){
+int FindRegisterName(char* arg){
 
     return arg[0] - 'a' + 1;
 
@@ -239,7 +264,7 @@ int CheckMark(commands_t* codeStruct, char* arg, checkMarkParams param){        
 
     char* ptr = strchr(arg, ':');
     int hasMark = (ptr)? 1:0;
-    printf(BRED "%s\n" RESET, arg);
+    printf(BRED "hasMark:%d %s\n" RESET, hasMark, arg);
 
     if (param == FROM_CODE){
         if (hasMark){
@@ -355,7 +380,7 @@ static errors FixCode(commands_t* codeStruct){
 }
 
 /*=======================================================================*/
-
+/*
 static int64_t GetArg(commands_t* codeStruct){
     int64_t arg         = 0;
     char    arg_ch[64]  = "";
@@ -367,9 +392,71 @@ static int64_t GetArg(commands_t* codeStruct){
 
     return arg;
 }
+*/
+/*=======================================================================*/
+
+static char* GetWord(commands_t* codeStruct, int numLine, int wordSize, char* word){
+    string_t line   = codeStruct->splittedInput[numLine];
+    char* startAddr = nullptr;
+
+    if (!numLine)   startAddr = line.addr;
+    else            startAddr = line.addr + 1;
+
+    for (int i = 0; i < line.size - 1; i++){
+        if (startAddr[i] == '\n' || startAddr[i] == ' '){
+            word[i] = '\0';
+
+            return startAddr + i + 1;
+        }
+
+        word[i] = startAddr[i];
+    }
+
+    return startAddr;
+}
 
 /*=======================================================================*/
 
+static char* GetArg(char* input, char* arg){
+
+    for (int i = 0; i < 32; i++){
+        if (input[i] == '\n' || input[i] == ' '){
+            arg[i] = '\0';
+
+            return arg + i + 1;
+        }
+
+        arg[i] = input[i];
+    }
+
+
+    return arg;
+}
+
+/*=======================================================================*/
+
+static errors SplitCode(commands_t* codeStruct){
+    codeStruct->splittedInput->addr = (char*)codeStruct->fileBuffer;
+
+    for (int i = 0; i < codeStruct->sizeFileBuffer; i++){
+        char arg = ((char*)codeStruct->fileBuffer)[i];
+
+        if (arg == '\n'){
+            (codeStruct->splittedInput)[codeStruct->numSplitted + 1].addr   = (char*)(codeStruct->fileBuffer) + i;
+            char* lastAdr = (char*)(codeStruct->fileBuffer) + i;
+            char* prevAdr = (codeStruct->splittedInput)[codeStruct->numSplitted].addr;
+
+            (codeStruct->splittedInput)[codeStruct->numSplitted].size = lastAdr - prevAdr;
+            codeStruct->numSplitted++;
+            printf(BGRN "<%p>\n" RESET, (codeStruct->splittedInput)[codeStruct->numSplitted].addr);
+            printf(BGRN "<%lu>\n" RESET, (codeStruct->splittedInput)[codeStruct->numSplitted - 1].size);
+        }
+    }
+
+    return OK;
+}
+
+/*=======================================================================*/
 static void Compile(fileNames_t* fileNames){
     commands_t codeStruct = {};
     codeStruct.fileNames = fileNames;
@@ -383,52 +470,81 @@ static void Compile(fileNames_t* fileNames){
     FILE* inputFile  = codeStruct.inputFile;
     FILE* outputFile = codeStruct.outputFile;
 
-    bool RunCommands = 1;
+    bool RunCommands    = 1;
+    int numLine         = 0;
 
     while (RunCommands){
         char cmd[128] = "";
-        fscanf(inputFile, "%s", cmd);
+        if (numLine >= codeStruct.numSplitted) break;
 
+        char* second_cmdPtr = GetWord(&codeStruct, numLine, 128, cmd);
+        printf(BMAG "<%s>\n" RESET, cmd);
+        printf(BMAG "<%c>\n" RESET, *second_cmdPtr);
 
         if (!strcmp(cmd, "push")){
-            int64_t arg         = 0;
-            int64_t arg2        = 0;
-            char    reg_name[3] = "";
+            int64_t numArg = 0;
+            int64_t numReg = 0;
 
-            int firstArgExist = fscanf(inputFile, "%lld", &arg);
-            if (!firstArgExist){
-                                        fscanf(inputFile, "%s", reg_name);
-                int secondArgExist =    fscanf(inputFile, " + %lld", &arg2);
+            char secondArg[32]  = "";
+            GetArg(second_cmdPtr, secondArg);
 
-                if (!secondArgExist){
-                    *((int64_t*)codeStruct.codePointer + codeStruct.pc)     = 0b01000001;
+            printf("%s\n", secondArg);
 
-                    arg = FindRegisterName(reg_name);
+            char* ptrMemory     = strchr(secondArg,'[');
+            char* ptrRegisters  = strchr(secondArg,'x');
+            char* ptrSum        = strchr(secondArg,'+');
+            bool mem    = (ptrMemory)       ?1:0;
+            bool reg    = (ptrRegisters)    ?1:0;
+            bool sum    = (ptrSum)          ?1:0;
+            char switchValue    = reg * 2 + sum;
 
-                    *((int64_t*)codeStruct.codePointer + codeStruct.pc + 1) = arg;
+            printf(BBLU "r:%p, s:%p, m:%p\n" RESET, ptrRegisters, ptrSum, ptrMemory);
 
+            switch (switchValue){
+                case 0:{
+                    numArg = atol(secondArg);
+                    if (mem) numArg = atol(ptrMemory + 1);
+
+
+                    *((uint64_t*)codeStruct.codePointer + codeStruct.pc)            = 0b00100001;
+                    if (mem) *((uint64_t*)codeStruct.codePointer + codeStruct.pc)   = 0b10100001;
+
+                    *((uint64_t*)codeStruct.codePointer + codeStruct.pc + 1)= numArg;
                     codeStruct.pc += 2;
+                    break;
                 }
 
-                else{
-                    *((int64_t*)codeStruct.codePointer + codeStruct.pc)     = 0b01100001;
+                case 2:{
+                    numReg = FindRegisterName(ptrRegisters - 1);
 
-                    arg = FindRegisterName(reg_name);
 
-                    *((int64_t*)codeStruct.codePointer + codeStruct.pc + 1) = arg;
-                    *((int64_t*)codeStruct.codePointer + codeStruct.pc + 2) = arg2;
+                    *((uint64_t*)codeStruct.codePointer + codeStruct.pc)            = 0b01000001;
+                    if (mem) *((uint64_t*)codeStruct.codePointer + codeStruct.pc)   = 0b11000001;
 
+                    *((uint64_t*)codeStruct.codePointer + codeStruct.pc + 1)= numReg;
+                    codeStruct.pc += 2;
+                    break;
+                }
+
+                case 3:{
+                    numArg = atol(ptrSum + 1);
+                    numReg = FindRegisterName(ptrRegisters - 1);
+
+
+                    *((uint64_t*)codeStruct.codePointer + codeStruct.pc)            = 0b01100001;
+                    if (mem) *((uint64_t*)codeStruct.codePointer + codeStruct.pc)   = 0b11100001;
+
+                    *((uint64_t*)codeStruct.codePointer + codeStruct.pc + 1)= numReg;
+                    *((uint64_t*)codeStruct.codePointer + codeStruct.pc + 2)= numArg;
                     codeStruct.pc += 3;
+                    break;
                 }
-            }
 
-            else{
-
-                *((int64_t*)codeStruct.codePointer + codeStruct.pc)     = 0b00100001;
-                *((int64_t*)codeStruct.codePointer + codeStruct.pc + 1) = arg;
-
-                codeStruct.pc += 2;
-
+                default:{
+                    RunCommands = 0;
+                    printf(BRED "\nERROR\n\n" RESET);
+                    break;
+                }
             }
         }
 
@@ -499,10 +615,10 @@ static void Compile(fileNames_t* fileNames){
             *((uint64_t*)codeStruct.codePointer + codeStruct.pc) = JMP;
 
             //fixup
-            int64_t arg = GetArg(&codeStruct);
+            //int64_t arg = GetArg(&codeStruct);
             //fixup
 
-            *((uint64_t*)codeStruct.codePointer + codeStruct.pc + 1) = arg;
+            //*((uint64_t*)codeStruct.codePointer + codeStruct.pc + 1) = arg;
             codeStruct.pc += 2;
         }
 
@@ -510,10 +626,10 @@ static void Compile(fileNames_t* fileNames){
             *((uint64_t*)codeStruct.codePointer + codeStruct.pc) = JA;
 
             //fixup
-            int64_t arg = GetArg(&codeStruct);
+            //int64_t arg = GetArg(&codeStruct);
             //fixup
 
-            *((uint64_t*)codeStruct.codePointer + codeStruct.pc + 1) = arg;
+            //*((uint64_t*)codeStruct.codePointer + codeStruct.pc + 1) = arg;
             codeStruct.pc += 2;
         }
 
@@ -524,10 +640,10 @@ static void Compile(fileNames_t* fileNames){
 
         else if (!strcmp(cmd, "call")){
             *((uint64_t*)codeStruct.codePointer + codeStruct.pc) = CALL;
-            int64_t arg = GetArg(&codeStruct);
+            //int64_t arg = GetArg(&codeStruct);
             //fixup
 
-            *((uint64_t*)codeStruct.codePointer + codeStruct.pc + 1) = arg;
+            //*((uint64_t*)codeStruct.codePointer + codeStruct.pc + 1) = arg;
             codeStruct.pc += 2;
         }
 
@@ -546,11 +662,12 @@ static void Compile(fileNames_t* fileNames){
         if (codeStruct.numLines >= codeStruct.maxLines) RunCommands = 0;
         codeStruct.numLines++;
 
+        numLine++;
     }
 
-    FixCode(&codeStruct);
     CommandsDump(&codeStruct);
-    OutputCode(&codeStruct);
+    FixCode(&codeStruct);
 
+    OutputCode(&codeStruct);
 }
 
