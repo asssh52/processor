@@ -8,10 +8,11 @@
 
 #define MEOW fprintf(stderr, "\e[0;31m" "\nmeow\n" "\e[0m");
 
-const int HEADER_SIZE = 4;
-const int REGISTER_NUM = 4;
-const char* SIGNATURE = "meow";
-const char* VERSION = "v.4";
+const int   SIZE_HEADER     = 4;
+const int   REGISTER_NUM    = 4;
+const int   SIZE_RAM        = 32;
+const char* SIGNATURE       = "meow";
+const char* VERSION         = "v.4";
 
 typedef struct header{
 
@@ -34,6 +35,7 @@ typedef struct spu{
 
     Stack_t*        stk;
     Stack_t*        returnStack;
+    int64_t*        RAM;
     void*           codePointer;
     void*           registersPointer;
 
@@ -119,12 +121,15 @@ static errors ProcessorCtor(spu_t* spu, const char* name){
     spu->pc = 0;
 
     //INITIALIZE CODE BUFFER:
-    spu->codePointer                = calloc(SIZE_COMMAND, spu->numCommands); // check if allocated
-    spu->memCommandsAllocated       = SIZE_COMMAND * spu->numCommands;
+    spu->codePointer            = calloc(SIZE_COMMAND, spu->numCommands); // check if allocated
+    spu->memCommandsAllocated   = SIZE_COMMAND * spu->numCommands;
 
     //INITIALIZE REGISTER BUFFER:
-    spu->registersPointer           = calloc(SIZE_ARG, spu->numRegisters);
-    spu->memRegistersAllocated      = SIZE_ARG * spu->numRegisters;
+    spu->registersPointer       = calloc(SIZE_ARG, spu->numRegisters);
+    spu->memRegistersAllocated  = SIZE_ARG * spu->numRegisters;
+
+    //INITIALIZE RAM:
+    spu->RAM                    = (int64_t*)calloc(sizeof(int64_t), SIZE_RAM);
 
     //VERIFY CODE:
     if (CheckSignature(spu)) return ERR_;
@@ -169,7 +174,7 @@ static errors CheckSignature(spu_t* spu){
     char signatureBuffer[256] = "";
     int version = -1;
 
-    for (int i = 0; i < HEADER_SIZE; i++){
+    for (int i = 0; i < SIZE_HEADER; i++){
 
         fscanf(spu->inputFile, "%s", signatureBuffer);
 
@@ -288,6 +293,7 @@ static errors ProcessorDump(spu_t* spu){
     fprintf(logFile, "Allocated memory for commands(bytes): \t%lu\n", spu->memCommandsAllocated);
     if (logFile == stdout) printf(RESET);
 
+    fprintf(logFile, "\n");
 
     //CODE BUFFER:
     if (!spu->codePointer){
@@ -307,7 +313,7 @@ static errors ProcessorDump(spu_t* spu){
 
         for (size_t ip = 0; ip < MAX_NUM_COMMANDS; ip++){
 
-            fprintf(spu->logFile, "pc<%lu>:\t%lld", ip, *(cmdPtr + ip));
+            fprintf(spu->logFile, "pc<%0.2lu>: %lld", ip, *(cmdPtr + ip));
 
             if (ip == spu->pc){
                 if (spu->logFile == stdout) fprintf(spu->logFile, BRED  "\t\t <---- ded" RESET);
@@ -316,6 +322,22 @@ static errors ProcessorDump(spu_t* spu){
 
             fprintf(spu->logFile, "\n");
         }
+    }
+
+    fprintf(logFile, "\n");
+
+    if (logFile == stdout) printf(CYN);
+    fprintf(logFile, "RAM size: %d\n", SIZE_RAM);
+    if (logFile == stdout) printf(RESET);
+
+    fprintf(logFile, "\n");
+
+    if (logFile == stdout) printf(YEL);
+    fprintf(logFile, "RAM:\n");
+    if (logFile == stdout) printf(RESET);
+
+    for (size_t adr = 0; adr < SIZE_RAM; adr++){
+        fprintf(spu->logFile, "ram<%0.2lu>: %lld\n", adr, *(spu->RAM + adr));
     }
 
     fprintf(logFile, "---------------------------\n");
@@ -374,7 +396,6 @@ void Run(fileNames_t* fileNames){
     ProcessorDump(&spu);
 
     while (RunCommands){
-        ProcessorDump(&spu);
 
         if (spu.pc > MAX_NUM_COMMANDS){
             RunCommands = 0;
@@ -382,57 +403,33 @@ void Run(fileNames_t* fileNames){
         }
 
         char* nextArg = (char*)spu.codePointer + spu.pc * SIZE_ARG;
-        printf("0x%x\n", *nextArg);
+        //printf("0x%x\n", *nextArg);
 
         const char OPERATOR_MUSK = 0b00011111;
         switch (*nextArg & OPERATOR_MUSK){
 
             case PUSH:{
-                char pushVariant = *nextArg & 0b11100000;
+                int64_t argValue    = 0;
 
-                switch(pushVariant){
-                    case 0x20:{
-                        int64_t num_in = 0;
-                        num_in = *(nextArg + 1 * SIZE_COMMAND);
-
-                        StackPush(spu.stk, num_in);
-
-                        spu.pc += 2;
-                        break;
-                    }
-
-                    case 0x40:{
-                        int64_t num_in = 0, arg_out = 0;
-                        num_in  = *(nextArg + 1 * SIZE_COMMAND);
-                        arg_out = *((int64_t*)spu.registersPointer + num_in - 1);
-
-                        StackPush(spu.stk, arg_out);
-
-                        spu.pc += 2;
-                        break;
-                    }
-
-                    case 0x60:{
-                        int64_t frst_num_in = 0, arg_out = 0, scnd_num_in = 0, num_reg = 0;
-
-                        frst_num_in = *(nextArg + 1 * SIZE_ARG);
-                        num_reg     = *((int64_t*)spu.registersPointer + frst_num_in - 1);
-
-                        scnd_num_in = *(nextArg + 2 * SIZE_ARG);
-
-                        arg_out = num_reg + scnd_num_in;
-                        StackPush(spu.stk, arg_out);
-
-                        spu.pc += 3;
-                        break;
-                    }
-
-                    default:{
-                                                 //error
-                        break;
-                    }
+                //registers
+                if (*nextArg & 0b01000000){
+                    spu.pc++;
+                    argValue = *((int64_t*)spu.registersPointer + *((int64_t*)spu.codePointer + spu.pc));
                 }
 
+                //immediate
+                if (*nextArg & 0b00100000){
+                    spu.pc++;
+                    argValue += *((int64_t*)spu.codePointer + spu.pc);
+                }
+
+                //memory
+                if (*nextArg & 0b10000000){
+                    argValue = spu.RAM[argValue];
+                }
+
+                spu.pc++;
+                StackPush(spu.stk, argValue);
                 break;
             }
 
@@ -623,7 +620,7 @@ void Run(fileNames_t* fileNames){
             }
 
             default :{
-                printf(RED "\nERROR:pc=%d\n" RESET, spu.pc);
+                printf(RED "\nERROR:pc=%lu\n" RESET, spu.pc);
 
                 spu.pc++;
                 break;
