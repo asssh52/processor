@@ -11,6 +11,14 @@ enum checkMarkParams{
     FROM_FUNC = 1
 };
 
+typedef struct header{
+
+    int64_t     signature;
+    int64_t     version;
+    uint64_t    numCommands;
+
+} header_t;
+
 typedef struct fileNames{
     const char* inputFileName;
     const char* outputFileName;
@@ -37,13 +45,11 @@ typedef struct fixup{
 
 typedef struct commands{
     const char*     name;
+    header_t        header;
 
     void*           codePointer;
-    size_t          numCommands;
-    size_t          sizeAllocated;
 
-    size_t          maxLines;
-    size_t          numLines;
+    size_t          sizeAllocated;
 
     size_t          pc;
 
@@ -64,4 +70,5 @@ typedef struct commands{
     FILE*           logFile;
     FILE*           inputFile;
     FILE*           outputFile;
+    FILE*           outputBinFile;
 } commands_t;

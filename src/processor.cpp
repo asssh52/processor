@@ -8,19 +8,11 @@
 
 #define MEOW fprintf(stderr, "\e[0;31m" "\nmeow\n" "\e[0m");
 
-const int   SIZE_HEADER     = 4;
-const int   REGISTER_NUM    = 4;
-const int   SIZE_RAM        = 32;
-const char* SIGNATURE       = "meow";
-const char* VERSION         = "v.4";
-
-typedef struct header{
-
-    uint64_t signature;
-    uint64_t version;
-    uint64_t size;
-
-} header_t;
+const int       REGISTER_NUM    = 4;
+const int       SIZE_RAM        = 32;
+const int64_t   SIGNATURE       = 0x574f454d;
+const int64_t   VERSION         = 5;
+const int64_t   DRAW_RES        = 5;
 
 typedef struct fileNames{
 
@@ -97,7 +89,7 @@ static errors ProcessorCtor(spu_t* spu, const char* name){
     spu->name = name;
 
     // WORK WITH FILES:
-    const char* defaultFileNameIn  = "./bin/user_output.asm";
+    const char* defaultFileNameIn  = "./bin/output_bin.asm";
     const char* defaultFileNameOut = "stdout";
 
     spu->inputFile  = fopen(spu->fileNames->inputFileName,  "r");
@@ -117,8 +109,10 @@ static errors ProcessorCtor(spu_t* spu, const char* name){
 
     //FILL STRUCTURE FIELDS:
     spu->numRegisters   = REGISTER_NUM;
-    spu->numCommands    = MAX_NUM_COMMANDS;
     spu->pc = 0;
+
+    //VERIFY CODE:
+    if (CheckSignature(spu)) return ERR_;
 
     //INITIALIZE CODE BUFFER:
     spu->codePointer            = calloc(SIZE_COMMAND, spu->numCommands); // check if allocated
@@ -131,8 +125,7 @@ static errors ProcessorCtor(spu_t* spu, const char* name){
     //INITIALIZE RAM:
     spu->RAM                    = (int64_t*)calloc(sizeof(int64_t), SIZE_RAM);
 
-    //VERIFY CODE:
-    if (CheckSignature(spu)) return ERR_;
+
 
     //FILL CODE BUFFER:
     if (!spu->errorType) FillCodeBuffer(spu);
@@ -171,41 +164,24 @@ static errors ProcessorDtor(spu_t* spu){
 
 static errors CheckSignature(spu_t* spu){
                                                     //verificator
-    char signatureBuffer[256] = "";
-    int version = -1;
+    header_t header = {};
+    fread(&header, sizeof(header_t), 1, spu->inputFile);
 
-    for (int i = 0; i < SIZE_HEADER; i++){
+    printf(BYEL "sign:%llx, ver:%lld, num:%lld\n" RESET, header.signature, header.version, header.numCommands);
 
-        fscanf(spu->inputFile, "%s", signatureBuffer);
+    if (header.signature != SIGNATURE){
+        spu->errorType = 4;
 
-        if (!strcmp(signatureBuffer, "signature:")){
-
-            fscanf(spu->inputFile, "%s", signatureBuffer);
-
-            fprintf(stderr, "\n[%s]OK\n", signatureBuffer);
-
-            if (strcmp(signatureBuffer, SIGNATURE)){
-                printf(RED "invalid signature\n" RESET);
-                spu->errorType = INVALID_SIGNATURE;
-
-                return INVALID_SIGNATURE;
-            }
-        }
-
-        else if (!strcmp(signatureBuffer, "version:")){
-
-            fscanf(spu->inputFile, "%s", signatureBuffer);
-
-            fprintf(stderr, "\n[%s]OK\n", signatureBuffer);
-
-            if (strcmp(signatureBuffer, VERSION)){
-                printf(RED "invalid version\n" RESET);
-                spu->errorType = INVALID_VERSION;
-
-                return INVALID_VERSION;
-            }
-        }
+        return ERR_;
     }
+
+    if (header.version != VERSION){
+        spu->errorType = 3;
+
+        return ERR_;
+    }
+
+    spu->numCommands = header.numCommands;
 
     return OK_;
 }
@@ -214,10 +190,7 @@ static errors CheckSignature(spu_t* spu){
 
 static errors FillCodeBuffer(spu_t* spu){
                                                         //verificator
-    for (int ip = 0; ip < MAX_NUM_COMMANDS; ip++){
-        int64_t* pointer = (int64_t*)spu->codePointer + ip;
-        fscanf(spu->inputFile, "%lld\n", pointer);
-    }
+    fread(spu->codePointer, 1, spu->numCommands * 8, spu->inputFile);
 
     return OK_;
 }
@@ -345,7 +318,7 @@ static errors ProcessorDump(spu_t* spu){
         fprintf(logFile, "Commands:\n");
         if (logFile == stdout) printf(RESET);
 
-        for (size_t ip = 0; ip < MAX_NUM_COMMANDS; ip++){
+        for (size_t ip = 0; ip < spu->numCommands; ip++){
 
             fprintf(spu->logFile, "pc<%0.2lu>: %lld", ip, *(cmdPtr + ip));
 
@@ -431,7 +404,7 @@ void Run(fileNames_t* fileNames){
 
     while (RunCommands){
 
-        if (spu.pc > MAX_NUM_COMMANDS){
+        if (spu.pc > spu.numCommands){
             RunCommands = 0;
             ProcessorDump(&spu);
         }
@@ -619,6 +592,30 @@ void Run(fileNames_t* fileNames){
                 StackPop(spu.returnStack, &num_arg);
 
                 spu.pc = num_arg + 2;
+                break;
+            }
+
+            case DRAW:{
+
+                printf("\npicture:\n\n");
+
+                for (int x = 0; x < DRAW_RES; x++){
+                    for (int y = 0; y < DRAW_RES; y++){
+                        if (spu.RAM[x * DRAW_RES + y] == 0){
+                            printf(".");
+                        }
+
+                        else{
+                            printf("*");
+                        }
+                    }
+
+                    printf("\n");
+                }
+
+                printf("\n");
+
+                spu.pc++;
                 break;
             }
 

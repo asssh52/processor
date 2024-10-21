@@ -8,12 +8,12 @@
 
 #define MEOW fprintf(stderr, "\e[0;31m" "\nmeow\n" "\e[0m");
 
-const char* SIGNATURE = "meow";
-const int VERSION = 4;
+const int64_t SIGNATURE = 0x574F454D;
+const int64_t VERSION = 5;
 
 const size_t MAX_LINES  = 64;
-const size_t NUM_LABELS = 8;
-const size_t NUM_FIXUP  = 8;
+const size_t MAX_LABELS = 8;
+const size_t MAX_FIXUP  = 8;
 
 static void     Compile     (fileNames_t*   fileNames);
 static errors   FillLabels  (commands_t*    codeStruct);
@@ -61,8 +61,9 @@ static errors CommandsCtor(commands_t* codeStruct, const char* name){
     if (!codeStruct) return ERR_NULLPTR;
 
     //files
-    const char* defaultFileNameIn  = "./bin/user_input.txt";
-    const char* defaultFileNameOut = "./bin/user_output.asm";
+    const char* defaultFileNameIn       = "./bin/user_input.txt";
+    const char* defaultFileNameOut      = "./bin/user_output.asm";
+    const char* defaultFileNameOutBin   = "./bin/output_bin.asm";
 
     FILE* inputFile  = fopen(codeStruct->fileNames->inputFileName, "r");
     if (inputFile == nullptr)   inputFile = fopen(defaultFileNameIn, "r");
@@ -70,22 +71,27 @@ static errors CommandsCtor(commands_t* codeStruct, const char* name){
     FILE* outputFile = fopen(codeStruct->fileNames->outputFileName, "w");
     if (outputFile == nullptr)  outputFile = fopen(defaultFileNameOut, "w");
 
+    FILE* outputBinFile = fopen(defaultFileNameOutBin, "wb");
+
     FILE* logFile = fopen(codeStruct->fileNames->logFileName, "w");
     if (logFile == nullptr) logFile = stdout;
 
-    codeStruct->inputFile   = inputFile;
-    codeStruct->outputFile  = outputFile;
-    codeStruct->logFile     = logFile;
+
+
+    codeStruct->inputFile       = inputFile;
+    codeStruct->outputFile      = outputFile;
+    codeStruct->outputBinFile   = outputBinFile;
+    codeStruct->logFile         = logFile;
     //files
 
-    codeStruct->numCommands     = MAX_NUM_COMMANDS;                   //change                             //count commands
-    codeStruct->maxLines        = MAX_LINES;
+    //HEADER:
+    codeStruct->header.signature    = SIGNATURE;
+    codeStruct->header.version      = VERSION;
+
 
     struct stat st;                                                   //change!
     stat(defaultFileNameIn, &st);
     size_t inputFileSize = st.st_size;
-
-    printf(BBLU "%lu\n" RESET, inputFileSize);
 
     codeStruct->fileBuffer      = calloc(1, inputFileSize);
     codeStruct->sizeFileBuffer  = inputFileSize;
@@ -95,18 +101,18 @@ static errors CommandsCtor(commands_t* codeStruct, const char* name){
     fread(codeStruct->fileBuffer, 1, codeStruct->sizeFileBuffer, inputFile);
     SplitCode(codeStruct);
 
+    printf(BBLU "%lu" RESET, codeStruct->numSplitted);
+
     codeStruct->name = name;
-    codeStruct->codePointer     = calloc(SIZE_ARG, codeStruct->numCommands);     //exception nlptr = calloc
-    codeStruct->sizeAllocated   = codeStruct->numCommands * SIZE_ARG;
+    codeStruct->codePointer     = calloc(SIZE_ARG, MAX_NUM_COMMANDS);     //exception nlptr = calloc
+    codeStruct->sizeAllocated   = MAX_NUM_COMMANDS * SIZE_ARG;
 
     codeStruct->numElemsFixup   = 0;
-    codeStruct->sizeFixup       = NUM_FIXUP;
-    codeStruct->fixupPointer    = (fixup_t*)calloc(sizeof(fixup_t), codeStruct->sizeFixup);
+    codeStruct->fixupPointer    = (fixup_t*)calloc(sizeof(fixup_t), MAX_FIXUP);
     FillFixups(codeStruct);
 
-    codeStruct->sizeLabels      = NUM_LABELS;
     codeStruct->numElemsLabels  = 0;
-    codeStruct->labelsPointer   = (label_t*)calloc(sizeof(label_t), codeStruct->sizeLabels);
+    codeStruct->labelsPointer   = (label_t*)calloc(sizeof(label_t), MAX_LABELS);
     FillLabels(codeStruct);
 
     return OK;
@@ -148,7 +154,7 @@ static errors CommandsDump(commands_t* codeStruct){
     if (logFile == stdout) printf(CYN);
     fprintf(logFile, "Struct pointer:                       \t%p\n",  codeStruct);
     fprintf(logFile, "Code pointer:                         \t%p\n",  codeStruct->codePointer);
-    fprintf(logFile, "Number of commands:                   \t%lu\n", codeStruct->numCommands);
+    fprintf(logFile, "Number of commands:                   \t%lu\n", MAX_NUM_COMMANDS);
     fprintf(logFile, "Size of command:                      \t%lu\n", SIZE_ARG);
     fprintf(logFile, "Allocated memory for commands(bytes): \t%lu\n", codeStruct->sizeAllocated);
     if (logFile == stdout) printf(RESET);
@@ -166,10 +172,10 @@ static errors CommandsDump(commands_t* codeStruct){
     if (logFile == stdout) printf(BLU);
     fprintf(logFile, "Label data.\n");
     fprintf(logFile, "Label pointer:\t\t%p\n",  codeStruct->labelsPointer);
-    fprintf(logFile, "Size of labels:\t%lu\n",  codeStruct->sizeLabels);
+    fprintf(logFile, "Size of labels:\t\t%lu\n",  MAX_LABELS);
 
     label_t* labelsPtr = codeStruct->labelsPointer;
-    for (int i = 0; i < codeStruct->sizeLabels; i++){
+    for (int i = 0; i < MAX_LABELS; i++){
         fprintf(logFile, "[label:%d], name:<%s>, addr:%lld\n", i, (labelsPtr + i)->name, (labelsPtr + i)->addr);
     }
     if (logFile == stdout) printf(RESET);
@@ -182,11 +188,11 @@ static errors CommandsDump(commands_t* codeStruct){
     if (logFile == stdout) printf(CYN);
     fprintf(logFile, "Fixup data.\n");
     fprintf(logFile, "Fixup pointer:\t\t%p\n",          codeStruct->fixupPointer);
-    fprintf(logFile, "Size of fixups:\t%lu\n",          codeStruct->sizeFixup);
+    fprintf(logFile, "Size of fixups:\t\t%lu\n",          MAX_FIXUP);
     fprintf(logFile, "Number of fixups:\t%lu\n",        codeStruct->numElemsFixup);
 
     fixup_t* fixupsPtr = codeStruct->fixupPointer;
-    for (int i = 0; i < codeStruct->sizeFixup; i++){
+    for (int i = 0; i < MAX_FIXUP; i++){
         fprintf(logFile, "[fixup:%d], label name:<%lld>, code addr:%lld\n",
                                  i, (fixupsPtr + i)->labelNum, (fixupsPtr + i)->codeAdr);
     }
@@ -227,25 +233,37 @@ static errors CommandsDump(commands_t* codeStruct){
 static errors PrintSignature(commands_t* codeStruct){
     FILE* outputFile = codeStruct->outputFile;
 
-    fprintf(outputFile, "=======================================\n");
-    fprintf(outputFile, "signature: %s\n", SIGNATURE);
-    fprintf(outputFile, "version: v.%d\n", VERSION);
-    fprintf(outputFile, "=======================================\n");
+    fprintf(outputFile, "LISTING:\n");
+    fprintf(outputFile, "signature: %llx\n", SIGNATURE);
+    fprintf(outputFile, "version: v.%lld\n", VERSION);
+    fprintf(outputFile, "num commands:%lu\n", codeStruct->pc);
 
     return OK;
 }
 
 /*=======================================================================*/
 
-static errors OutputCode(commands_t* codeStruct){
+static errors OutputCodeListing(commands_t* codeStruct){
     if (!codeStruct || !codeStruct->codePointer) return ERR_NULLPTR;
-                                                                                        //add file verifycator
-
-    int64_t* cmdPtr = (int64_t*)(codeStruct->codePointer);                            // change type
+                                                                           //add file verifycator
+    int64_t* cmdPtr = (int64_t*)(codeStruct->codePointer);                 // change type
 
     for (size_t pc = 0; pc < MAX_NUM_COMMANDS; pc++){
         fprintf(codeStruct->outputFile, "%lld\n", *(cmdPtr + pc));
     }
+
+    return OK;
+}
+
+/*=======================================================================*/
+
+static errors OutputCodeBin(commands_t* codeStruct){
+    if (!codeStruct || !codeStruct->codePointer) return ERR_NULLPTR;
+                                      //add file verifycator
+    codeStruct->header.numCommands = codeStruct->pc;
+
+    fwrite(&codeStruct->header      , sizeof(header_t), 1                             , codeStruct->outputBinFile);
+    fwrite(codeStruct->codePointer  , sizeof(int64_t) , codeStruct->header.numCommands, codeStruct->outputBinFile);
 
     return OK;
 }
@@ -260,7 +278,7 @@ int FindRegisterName(char* arg){
 
 /*=======================================================================*/
 
-int CheckMark(commands_t* codeStruct, char* arg, checkMarkParams param){        //rename
+int CheckMark(commands_t* codeStruct, char* arg, checkMarkParams param){   //rename
 
     char* ptr = strchr(arg, ':');
     int hasMark = (ptr)? 1:0;
@@ -343,7 +361,7 @@ static int FindLabel(commands_t* codeStruct, char* arg){
 
 static errors FillLabels(commands_t* codeStruct){
 
-    for (int i = 0; i < codeStruct->sizeLabels; i++){
+    for (int i = 0; i < MAX_LABELS; i++){
         (codeStruct->labelsPointer + i)->addr = -666;
         strcpy((codeStruct->labelsPointer + i)->name, "meow");
     }
@@ -355,7 +373,7 @@ static errors FillLabels(commands_t* codeStruct){
 
 static errors FillFixups(commands_t* codeStruct){
 
-    for (int i = 0; i < codeStruct->sizeFixup; i++){
+    for (int i = 0; i < MAX_FIXUP; i++){
         (codeStruct->fixupPointer + i)->  codeAdr = -666;
         (codeStruct->fixupPointer + i)->labelNum  = -666;
     }
@@ -450,8 +468,6 @@ static void Compile(fileNames_t* fileNames){
     CommandsCtor(&codeStruct, "mycode");
 
     CommandsDump(&codeStruct);
-
-    PrintSignature(&codeStruct);
 
     FILE* inputFile  = codeStruct.inputFile;
     FILE* outputFile = codeStruct.outputFile;
@@ -650,6 +666,11 @@ static void Compile(fileNames_t* fileNames){
             codeStruct.pc++;
         }
 
+        else if (!strcmp(cmd, "draw")){
+            *((uint64_t*)codeStruct.codePointer + codeStruct.pc) = DRAW;
+            codeStruct.pc++;
+        }
+
         else if (!strcmp(cmd, "jmp")){
             int64_t numArg = 0;
             char secondArg[32]  = "";
@@ -720,6 +741,9 @@ static void Compile(fileNames_t* fileNames){
     CommandsDump(&codeStruct);
     FixCode(&codeStruct);
 
-    OutputCode(&codeStruct);
+    OutputCodeBin(&codeStruct);
+
+    PrintSignature(&codeStruct);
+    OutputCodeListing(&codeStruct);
 }
 
