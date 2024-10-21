@@ -243,6 +243,40 @@ static errors PrintFilesData(spu_t* spu){
 
     return OK_;
 }
+/*=================================================================*/
+
+static int64_t* GetPopValue(spu_t* spu, int64_t nextArg){
+
+    int64_t argValue = 0;
+    uint64_t returnValue = 0;
+    uint64_t tempReturnValue = 0;
+
+    //registers
+    if (nextArg & 0b01000000){
+        spu->pc++;
+        argValue    = *((int64_t*)spu->registersPointer + *((int64_t*)spu->codePointer + spu->pc));
+        returnValue =
+               (size_t)((int64_t*)spu->registersPointer + *((int64_t*)spu->codePointer + spu->pc));
+    }
+
+    //immediate
+    if (nextArg & 0b00100000){
+        spu->pc++;
+        argValue += *((int64_t*)spu->codePointer + spu->pc);
+        *((int64_t*)spu->registersPointer) = argValue;
+    }
+
+    //memory
+    if (nextArg & 0b10000000){
+        returnValue = (size_t)(spu->RAM + argValue);
+    }
+
+    spu->pc++;
+
+    if (!returnValue || (nextArg & 0b00100000 && nextArg & 0b01000000 && !(nextArg & 0b10000000))) return (int64_t*)spu->registersPointer;
+
+    return (int64_t*)returnValue;
+}
 
 /*=================================================================*/
 
@@ -409,40 +443,16 @@ void Run(fileNames_t* fileNames){
         switch (*nextArg & OPERATOR_MUSK){
 
             case PUSH:{
-                int64_t argValue    = 0;
 
-                //registers
-                if (*nextArg & 0b01000000){
-                    spu.pc++;
-                    argValue = *((int64_t*)spu.registersPointer + *((int64_t*)spu.codePointer + spu.pc));
-                }
+                StackPush(spu.stk, *GetPopValue(&spu, *nextArg));
 
-                //immediate
-                if (*nextArg & 0b00100000){
-                    spu.pc++;
-                    argValue += *((int64_t*)spu.codePointer + spu.pc);
-                }
-
-                //memory
-                if (*nextArg & 0b10000000){
-                    argValue = spu.RAM[argValue];
-                }
-
-                spu.pc++;
-                StackPush(spu.stk, argValue);
                 break;
             }
 
             case POP:{
-                int64_t first_arg = 0, frst_num_in = 0, num_reg = 0;
 
-                frst_num_in = *(nextArg + 1 * SIZE_COMMAND);
+                StackPop(spu.stk, GetPopValue(&spu, *nextArg));
 
-                StackPop(spu.stk, &first_arg);
-
-                *((int64_t*)spu.registersPointer + frst_num_in - 1) = first_arg;
-
-                spu.pc += 2;
                 break;
             }
 
