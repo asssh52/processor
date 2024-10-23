@@ -1,6 +1,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
+#include <ctype.h>
 #include <sys/stat.h>
 #include "../hpp/colors.hpp"
 #include "../hpp/compiler.hpp"
@@ -401,23 +402,34 @@ static errors FixCode(commands_t* codeStruct){
 /*=======================================================================*/
 
 static char* GetWord(commands_t* codeStruct, int numLine, int wordSize, char* word){
-    string_t line   = codeStruct->splittedInput[numLine];
-    char* startAddr = nullptr;
+    string_t line       = codeStruct->splittedInput[numLine];
+    char* startAddr     = nullptr;
 
     if (!numLine)   startAddr = line.addr;
     else            startAddr = line.addr + 1;
+
+    char* returnValue = startAddr;
 
     for (int i = 0; i < line.size - 1; i++){
         if (startAddr[i] == '\n' || startAddr[i] == ' '){
             word[i] = '\0';
 
-            return startAddr + i + 1;
+            returnValue = startAddr + i + 1;
+            break;
         }
 
         word[i] = startAddr[i];
     }
 
-    return startAddr;
+    bool hasMark = (strchr(word, ':') == nullptr)? 0:1;
+    if (!hasMark){
+        for (int j = 0; word[j] != '\0' && word[j] != '\n' && word[j] != ' '; j++){
+            word[j] = tolower(startAddr[j]);
+        }
+
+    }
+
+    return returnValue;
 }
 
 /*=======================================================================*/
@@ -737,8 +749,8 @@ static void Compile(fileNames_t* fileNames){
         numLine++;
     }
 
-    CommandsDump(&codeStruct);
     FixCode(&codeStruct);
+    CommandsDump(&codeStruct);
 
     OutputCodeBin(&codeStruct);
 
