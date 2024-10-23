@@ -11,6 +11,8 @@
 const int64_t SIGNATURE = 0x574F454D;
 const int64_t VERSION = 5;
 
+const size_t MAX_CMDLEN = 128;
+const size_t MAX_ARGLEN = 32;
 const size_t MAX_LINES  = 64;
 const size_t MAX_LABELS = 8;
 const size_t MAX_FIXUP  = 8;
@@ -101,8 +103,6 @@ static errors CommandsCtor(commands_t* codeStruct, const char* name){
     fread(codeStruct->fileBuffer, 1, codeStruct->sizeFileBuffer, inputFile);
     SplitCode(codeStruct);
 
-    printf(BBLU "%lu" RESET, codeStruct->numSplitted);
-
     codeStruct->name = name;
     codeStruct->codePointer     = calloc(SIZE_ARG, MAX_NUM_COMMANDS);     //exception nlptr = calloc
     codeStruct->sizeAllocated   = MAX_NUM_COMMANDS * SIZE_ARG;
@@ -124,6 +124,9 @@ static errors CommandsDtor(commands_t* codeStruct){                             
     if (!codeStruct->codePointer) return ERR_NULLPTR;
 
     free(codeStruct->codePointer);
+    free(codeStruct->labelsPointer);
+    free(codeStruct->fixupPointer);
+    free(codeStruct->splittedInput);
 
     if (!codeStruct->logFile && codeStruct->logFile != stdout) fclose(codeStruct->logFile);
     if (!codeStruct->inputFile)                                fclose(codeStruct->inputFile);
@@ -282,7 +285,6 @@ int CheckMark(commands_t* codeStruct, char* arg, checkMarkParams param){   //ren
 
     char* ptr = strchr(arg, ':');
     int hasMark = (ptr)? 1:0;
-    printf(BRED "hasMark:%d %s\n" RESET, hasMark, arg);
 
     if (param == FROM_CODE){
         if (hasMark){
@@ -314,7 +316,6 @@ int CheckMark(commands_t* codeStruct, char* arg, checkMarkParams param){   //ren
             if (labelNum == -1){
                 strcpy((codeStruct->labelsPointer + codeStruct->numElemsLabels)->name, arg);
                 (codeStruct->labelsPointer + codeStruct->numElemsLabels)->addr  = -1;
-
 
 
                 //FIXUP:
@@ -423,7 +424,7 @@ static char* GetWord(commands_t* codeStruct, int numLine, int wordSize, char* wo
 
 static char* GetArg(char* input, char* arg){
 
-    for (int i = 0; i < 32; i++){
+    for (int i = 0; i < MAX_ARGLEN; i++){
         if (input[i] == '\n' || input[i] == ' '){
             arg[i] = '\0';
 
@@ -452,109 +453,116 @@ static errors SplitCode(commands_t* codeStruct){
 
             (codeStruct->splittedInput)[codeStruct->numSplitted].size = lastAdr - prevAdr;
             codeStruct->numSplitted++;
-            printf(BGRN "<%p>\n" RESET, (codeStruct->splittedInput)[codeStruct->numSplitted].addr);
-            printf(BGRN "<%lu>\n" RESET, (codeStruct->splittedInput)[codeStruct->numSplitted - 1].size);
         }
     }
 
     return OK;
 }
-
 /*=======================================================================*/
-static void Compile(fileNames_t* fileNames){
-    commands_t codeStruct = {};
-    codeStruct.fileNames = fileNames;
 
-    CommandsCtor(&codeStruct, "mycode");
+static void CompilePushArg(commands_t* codeStruct, bool* RunCommands, char* secondCmdPtr){
+    int64_t numArg = 0;
+    int64_t numReg = 0;
 
-    CommandsDump(&codeStruct);
+    char secondArg[32]  = "";
+    GetArg(secondCmdPtr, secondArg);
 
-    FILE* inputFile  = codeStruct.inputFile;
-    FILE* outputFile = codeStruct.outputFile;
+    char* ptrMemory     = strchr(secondArg,'[');
+    char* ptrRegisters  = strchr(secondArg,'x');
+    char* ptrSum        = strchr(secondArg,'+');
+    bool mem    = (ptrMemory)       ?1:0;
+    bool reg    = (ptrRegisters)    ?1:0;
+    bool sum    = (ptrSum)          ?1:0;
+    char switchValue    = reg * 2 + sum;
 
-    bool RunCommands    = 1;
-    int numLine         = 0;
-
-    while (RunCommands){
-        char cmd[128] = "";
-        if (numLine >= codeStruct.numSplitted) break;
-
-        char* second_cmdPtr = GetWord(&codeStruct, numLine, 128, cmd);
-        printf(BMAG "<%s>\n" RESET, cmd);
-        printf(BMAG "<%c>\n" RESET, *second_cmdPtr);
-
-        if (!strcmp(cmd, "push")){
-            int64_t numArg = 0;
-            int64_t numReg = 0;
-
-            char secondArg[32]  = "";
-            GetArg(second_cmdPtr, secondArg);
-
-            printf("%s\n", secondArg);
-
-            char* ptrMemory     = strchr(secondArg,'[');
-            char* ptrRegisters  = strchr(secondArg,'x');
-            char* ptrSum        = strchr(secondArg,'+');
-            bool mem    = (ptrMemory)       ?1:0;
-            bool reg    = (ptrRegisters)    ?1:0;
-            bool sum    = (ptrSum)          ?1:0;
-            char switchValue    = reg * 2 + sum;
-
-            printf(BBLU "r:%p, s:%p, m:%p\n" RESET, ptrRegisters, ptrSum, ptrMemory);
-
-            switch (switchValue){
-                case 0:{
-                    numArg = atol(secondArg);
-                    if (mem) numArg = atol(ptrMemory + 1);
+    switch (switchValue){
+        case 0:{
+            numArg = atol(secondArg);
+            if (mem) numArg = atol(ptrMemory + 1);
 
 
-                    *((uint64_t*)codeStruct.codePointer + codeStruct.pc)            = 0b00100001;
-                    if (mem) *((uint64_t*)codeStruct.codePointer + codeStruct.pc)   = 0b10100001;
+            *((uint64_t*)codeStruct->codePointer + codeStruct->pc)            = 0b00100001;
+            if (mem) *((uint64_t*)codeStruct->codePointer + codeStruct->pc)   = 0b10100001;
 
-                    *((uint64_t*)codeStruct.codePointer + codeStruct.pc + 1)= numArg;
-                    codeStruct.pc += 2;
-                    break;
-                }
-
-                case 2:{
-                    numReg = FindRegisterName(ptrRegisters - 1);
-
-
-                    *((uint64_t*)codeStruct.codePointer + codeStruct.pc)            = 0b01000001;
-                    if (mem) *((uint64_t*)codeStruct.codePointer + codeStruct.pc)   = 0b11000001;
-
-                    *((uint64_t*)codeStruct.codePointer + codeStruct.pc + 1)= numReg;
-                    codeStruct.pc += 2;
-                    break;
-                }
-
-                case 3:{
-                    numArg = atol(ptrSum + 1);
-                    numReg = FindRegisterName(ptrRegisters - 1);
-
-
-                    *((uint64_t*)codeStruct.codePointer + codeStruct.pc)            = 0b01100001;
-                    if (mem) *((uint64_t*)codeStruct.codePointer + codeStruct.pc)   = 0b11100001;
-
-                    *((uint64_t*)codeStruct.codePointer + codeStruct.pc + 1)= numReg;
-                    *((uint64_t*)codeStruct.codePointer + codeStruct.pc + 2)= numArg;
-                    codeStruct.pc += 3;
-                    break;
-                }
-
-                default:{
-                    RunCommands = 0;
-                    printf(BRED "\nERROR\n\n" RESET);
-                    break;
-                }
-            }
+            *((uint64_t*)codeStruct->codePointer + codeStruct->pc + 1) = numArg;
+            codeStruct->pc += 2;
+            break;
         }
 
-        else if (!strcmp(cmd, "pop")){
-            int64_t numArg = 0;
+        case 2:{
+            numReg = FindRegisterName(ptrRegisters - 1);
+
+
+            *((uint64_t*)codeStruct->codePointer + codeStruct->pc)            = 0b01000001;
+            if (mem) *((uint64_t*)codeStruct->codePointer + codeStruct->pc)   = 0b11000001;
+
+            *((uint64_t*)codeStruct->codePointer + codeStruct->pc + 1)= numReg;
+            codeStruct->pc += 2;
+            break;
+        }
+
+        case 3:{
+            numArg = atol(ptrSum + 1);
+            numReg = FindRegisterName(ptrRegisters - 1);
+
+
+            *((uint64_t*)codeStruct->codePointer + codeStruct->pc)            = 0b01100001;
+            if (mem) *((uint64_t*)codeStruct->codePointer + codeStruct->pc)   = 0b11100001;
+
+            *((uint64_t*)codeStruct->codePointer + codeStruct->pc + 1)= numReg;
+            *((uint64_t*)codeStruct->codePointer + codeStruct->pc + 2)= numArg;
+            codeStruct->pc += 3;
+            break;
+        }
+
+        default:{
+            RunCommands = 0;
+            printf(BRED "\nERROR\n\n" RESET);
+            break;
+        }
+    }
+}
+
+/*=======================================================================*/
+
+static void CompileJumpArg(commands_t* codeStruct, char* secondCmdPtr){
+    int64_t numArg = 0;
+    char secondArg[MAX_ARGLEN]  = "";
+    GetArg(secondCmdPtr, secondArg);
+
+    char* ptr = strchr(secondArg, ':');
+
+    if (ptr) numArg = CheckMark(codeStruct, secondArg, FROM_FUNC);
+    else     numArg = atol(secondArg);
+
+    *((uint64_t*)codeStruct->codePointer + codeStruct->pc)        = JMP;
+    *((uint64_t*)codeStruct->codePointer + codeStruct->pc + 1)    = numArg;
+    codeStruct->pc += 2;
+}
+
+/*=======================================================================*/
+
+static void CompileCallArg(commands_t* codeStruct, char* secondCmdPtr){
+    int64_t numArg = 0;
+    char secondArg[32]  = "";
+    GetArg(secondCmdPtr, secondArg);
+
+    numArg = CheckMark(codeStruct, secondArg, FROM_FUNC);
+
+    *((uint64_t*)codeStruct->codePointer + codeStruct->pc)        = CALL;
+    *((uint64_t*)codeStruct->codePointer + codeStruct->pc + 1)    = numArg;
+    codeStruct->pc += 2;
+}
+
+/*=======================================================================*/
+
+static void CompilePopArg(commands_t* codeStruct, bool* RunCommands, char* second_cmdPtr){
+
+
+    int64_t numArg = 0;
             int64_t numReg = 0;
 
-            char secondArg[32]  = "";
+            char secondArg[MAX_ARGLEN]  = "";
             GetArg(second_cmdPtr, secondArg);
 
             char* ptrMemory     = strchr(secondArg,'[');
@@ -570,9 +578,9 @@ static void Compile(fileNames_t* fileNames){
                     numReg = FindRegisterName(ptrRegisters - 1);
 
 
-                    *((uint64_t*)codeStruct.codePointer + codeStruct.pc)    = 0b01001001;
-                    *((uint64_t*)codeStruct.codePointer + codeStruct.pc + 1)= numReg;
-                    codeStruct.pc += 2;
+                    *((uint64_t*)codeStruct->codePointer + codeStruct->pc)    = 0b01001001;
+                    *((uint64_t*)codeStruct->codePointer + codeStruct->pc + 1)= numReg;
+                    codeStruct->pc += 2;
                     break;
                 }
 
@@ -580,9 +588,9 @@ static void Compile(fileNames_t* fileNames){
                     numArg = atol(ptrMemory + 1);
 
 
-                    *((uint64_t*)codeStruct.codePointer + codeStruct.pc)    = 0b10101001;
-                    *((uint64_t*)codeStruct.codePointer + codeStruct.pc + 1)= numArg;
-                    codeStruct.pc += 2;
+                    *((uint64_t*)codeStruct->codePointer + codeStruct->pc)    = 0b10101001;
+                    *((uint64_t*)codeStruct->codePointer + codeStruct->pc + 1)= numArg;
+                    codeStruct->pc += 2;
                     break;
                 }
 
@@ -590,9 +598,9 @@ static void Compile(fileNames_t* fileNames){
                     numReg = FindRegisterName(ptrRegisters - 1);
 
 
-                    *((uint64_t*)codeStruct.codePointer + codeStruct.pc)    = 0b11001001;
-                    *((uint64_t*)codeStruct.codePointer + codeStruct.pc + 1)= numReg;
-                    codeStruct.pc += 2;
+                    *((uint64_t*)codeStruct->codePointer + codeStruct->pc)    = 0b11001001;
+                    *((uint64_t*)codeStruct->codePointer + codeStruct->pc + 1)= numReg;
+                    codeStruct->pc += 2;
                     break;
                 }
 
@@ -601,10 +609,10 @@ static void Compile(fileNames_t* fileNames){
                     numReg = FindRegisterName(ptrRegisters - 1);
 
 
-                    *((uint64_t*)codeStruct.codePointer + codeStruct.pc)    = 0b11101001;
-                    *((uint64_t*)codeStruct.codePointer + codeStruct.pc + 1)= numReg;
-                    *((uint64_t*)codeStruct.codePointer + codeStruct.pc + 2)= numArg;
-                    codeStruct.pc += 3;
+                    *((uint64_t*)codeStruct->codePointer + codeStruct->pc)    = 0b11101001;
+                    *((uint64_t*)codeStruct->codePointer + codeStruct->pc + 1)= numReg;
+                    *((uint64_t*)codeStruct->codePointer + codeStruct->pc + 2)= numArg;
+                    codeStruct->pc += 3;
                     break;
                 }
 
@@ -614,6 +622,33 @@ static void Compile(fileNames_t* fileNames){
                     break;
                 }
             }
+}
+/*=======================================================================*/
+
+static void Compile(fileNames_t* fileNames){
+    commands_t codeStruct = {};
+    codeStruct.fileNames = fileNames;
+
+    CommandsCtor(&codeStruct, "mycode");
+
+    FILE* inputFile  = codeStruct.inputFile;
+    FILE* outputFile = codeStruct.outputFile;
+
+    bool RunCommands    = 1;
+    int numLine         = 0;
+
+    while (RunCommands){
+        char cmd[MAX_CMDLEN] = "";
+        if (numLine >= codeStruct.numSplitted) break;
+
+        char* secondCmdPtr = GetWord(&codeStruct, numLine, MAX_CMDLEN, cmd);
+
+        if (!strcmp(cmd, "push")){
+            CompilePushArg(&codeStruct, &RunCommands, secondCmdPtr);
+        }
+
+        else if (!strcmp(cmd, "pop")){
+            CompilePopArg(&codeStruct, &RunCommands, secondCmdPtr);
         }
 
         else if (!strcmp(cmd, "add")){
@@ -672,38 +707,11 @@ static void Compile(fileNames_t* fileNames){
         }
 
         else if (!strcmp(cmd, "jmp")){
-            int64_t numArg = 0;
-            char secondArg[32]  = "";
-            GetArg(second_cmdPtr, secondArg);
-
-            char* ptr = strchr(secondArg, ':');
-
-            if (ptr) numArg = CheckMark(&codeStruct, secondArg, FROM_FUNC);
-            else     numArg = atol(secondArg);
-
-            *((uint64_t*)codeStruct.codePointer + codeStruct.pc)        = JMP;
-            *((uint64_t*)codeStruct.codePointer + codeStruct.pc + 1)    = numArg;
-            codeStruct.pc += 2;
+            CompileJumpArg(&codeStruct, secondCmdPtr);
         }
 
         else if (!strcmp(cmd, "ja")){
-            int64_t numArg = 0;
-            char secondArg[32]  = "";
-            GetArg(second_cmdPtr, secondArg);
-
-            char* ptr = strchr(secondArg, ':');
-
-            if (ptr){
-                numArg = CheckMark(&codeStruct, secondArg, FROM_FUNC);
-            }
-
-            else {
-                numArg = atol(secondArg);
-            }
-
-            *((uint64_t*)codeStruct.codePointer + codeStruct.pc)        = JA;
-            *((uint64_t*)codeStruct.codePointer + codeStruct.pc + 1)    = numArg;
-            codeStruct.pc += 2;
+            CompileJumpArg(&codeStruct, secondCmdPtr);
         }
 
         else if (!strcmp(cmd, "hlt")){
@@ -712,15 +720,7 @@ static void Compile(fileNames_t* fileNames){
         }
 
         else if (!strcmp(cmd, "call")){
-            int64_t numArg = 0;
-            char secondArg[32]  = "";
-            GetArg(second_cmdPtr, secondArg);
-
-            numArg = CheckMark(&codeStruct, secondArg, FROM_FUNC);
-
-            *((uint64_t*)codeStruct.codePointer + codeStruct.pc)        = CALL;
-            *((uint64_t*)codeStruct.codePointer + codeStruct.pc + 1)    = numArg;
-            codeStruct.pc += 2;
+            CompileCallArg(&codeStruct, secondCmdPtr);
         }
 
         else if (!strcmp(cmd, "ret")){
@@ -730,7 +730,6 @@ static void Compile(fileNames_t* fileNames){
 
         else{
             if (!CheckMark(&codeStruct, cmd, FROM_CODE)){
-
                 *((uint64_t*)codeStruct.codePointer + codeStruct.pc) = ERR; //!!!
             }
         }
@@ -745,5 +744,7 @@ static void Compile(fileNames_t* fileNames){
 
     PrintSignature(&codeStruct);
     OutputCodeListing(&codeStruct);
+
+    CommandsDtor(&codeStruct);
 }
 

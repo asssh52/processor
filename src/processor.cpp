@@ -9,10 +9,11 @@
 #define MEOW fprintf(stderr, "\e[0;31m" "\nmeow\n" "\e[0m");
 
 const int       REGISTER_NUM    = 4;
-const int       SIZE_RAM        = 32;
+const int       SIZE_RAM        = 256;
 const int64_t   SIGNATURE       = 0x574f454d;
 const int64_t   VERSION         = 5;
-const int64_t   DRAW_RES        = 5;
+const int64_t   DRAW_RES_X      = 16;
+const int64_t   DRAW_RES_Y      = 8;
 
 typedef struct fileNames{
 
@@ -72,7 +73,6 @@ int main(int argc, const char *argv[]){
 
     fileNames.inputFileName  = (argc == 3) ? argv[1]  : "./bin/user_input.asm";
     fileNames.outputFileName = (argc == 3) ? argv[2]  : "stdout";
-    //fileNames.logFileName    = "meow.txt";
     fileNames.outputFileName   = "meow.txt";
 
     Run(&fileNames);
@@ -388,6 +388,63 @@ static errors ProcessorDump(spu_t* spu){
 
 /*=================================================================*/
 
+static errors Draw1(spu_t* spu){
+    printf("\npicture:\n\n");
+
+                for (int x = 0; x < DRAW_RES_Y; x++){
+                    for (int y = 0; y < DRAW_RES_X; y++){
+                        if (spu->RAM[x * DRAW_RES_Y + y] == 0){
+                            printf(".");
+                        }
+
+                        else{
+                            printf("@");
+                        }
+                    }
+
+                    printf("\n");
+                }
+
+                printf("\n");
+
+    return OK_;
+}
+
+/*=================================================================*/
+
+static errors Draw2(spu_t* spu){
+    printf("\npicture:\n\n");
+    int symbolsCount = 0;
+
+    for (int i = 0; i < 100; i++){
+        if (spu->RAM[2 * i] == 1){
+            for (int j = 0; j < spu->RAM[2 * i + 1]; j++){
+                printf(".");
+                symbolsCount++;
+
+                if (symbolsCount % DRAW_RES_X == 0){
+                    printf("\n");
+                }
+            }
+        }
+
+        else if (spu->RAM[2 * i] == 2){
+            for (int j = 0; j < spu->RAM[2 * i + 1]; j++){
+                printf("@");
+                symbolsCount++;
+
+                if (symbolsCount % DRAW_RES_X == 0){
+                    printf("\n");
+                }
+            }
+        }
+    }
+
+    return OK_;
+}
+
+/*=================================================================*/
+
 void Run(fileNames_t* fileNames){
 
     spu_t spu = {};
@@ -400,8 +457,6 @@ void Run(fileNames_t* fileNames){
         RunCommands = 0;
     }
 
-    ProcessorDump(&spu);
-
     while (RunCommands){
 
         if (spu.pc > spu.numCommands){
@@ -410,7 +465,6 @@ void Run(fileNames_t* fileNames){
         }
 
         char* nextArg = (char*)spu.codePointer + spu.pc * SIZE_ARG;
-        //printf("0x%x\n", *nextArg);
 
         const char OPERATOR_MUSK = 0b00011111;
         switch (*nextArg & OPERATOR_MUSK){
@@ -597,23 +651,7 @@ void Run(fileNames_t* fileNames){
 
             case DRAW:{
 
-                printf("\npicture:\n\n");
-
-                for (int x = 0; x < DRAW_RES; x++){
-                    for (int y = 0; y < DRAW_RES; y++){
-                        if (spu.RAM[x * DRAW_RES + y] == 0){
-                            printf(".");
-                        }
-
-                        else{
-                            printf("*");
-                        }
-                    }
-
-                    printf("\n");
-                }
-
-                printf("\n");
+                Draw2(&spu);
 
                 spu.pc++;
                 break;
