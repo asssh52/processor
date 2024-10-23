@@ -1,12 +1,25 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
+#include <ctype.h>
 #include <sys/stat.h>
 #include "../hpp/colors.hpp"
 #include "../hpp/compiler.hpp"
 #include "../hpp/operations.hpp"
 
 #define MEOW fprintf(stderr, "\e[0;31m" "\nmeow\n" "\e[0m");
+
+#define DEF_CMD_(command, num, arg,...)                                                     \
+        if (!strcmp(cmd, #command)){                                                        \
+            if (arg){                                                                       \
+                CompileArg(num, &codeStruct, &RunCommands, secondCmdPtr);                   \
+            }                                                                               \
+            else{                                                                           \
+                *((uint64_t*)codeStruct.codePointer + codeStruct.pc) = CMD_##command;       \
+                codeStruct.pc++;                                                            \
+            }                                                                               \
+        }                                                                                   \
+        else                                                                                \
 
 const int64_t SIGNATURE = 0x574F454D;
 const int64_t VERSION = 5;
@@ -384,6 +397,16 @@ static errors FillFixups(commands_t* codeStruct){
 
 /*=======================================================================*/
 
+static void ToUpper(char* input){
+    for (int i = 0; i < MAX_CMDLEN; i++){
+        //printf("%c\n", input[i]);
+        if (islower(input[i]))  input[i] = toupper(input[i]);
+        //printf("%c\n", input[i]);
+    }
+}
+
+/*=======================================================================*/
+
 static errors FixCode(commands_t* codeStruct){
 
     for (int i = 0; i < codeStruct->numElemsFixup; i++){
@@ -401,23 +424,34 @@ static errors FixCode(commands_t* codeStruct){
 /*=======================================================================*/
 
 static char* GetWord(commands_t* codeStruct, int numLine, int wordSize, char* word){
-    string_t line   = codeStruct->splittedInput[numLine];
-    char* startAddr = nullptr;
+    string_t line       = codeStruct->splittedInput[numLine];
+    char* startAddr     = nullptr;
 
     if (!numLine)   startAddr = line.addr;
     else            startAddr = line.addr + 1;
+
+    char* returnValue = startAddr;
 
     for (int i = 0; i < line.size - 1; i++){
         if (startAddr[i] == '\n' || startAddr[i] == ' '){
             word[i] = '\0';
 
-            return startAddr + i + 1;
+            returnValue = startAddr + i + 1;
+            break;
         }
 
         word[i] = startAddr[i];
     }
 
-    return startAddr;
+    bool hasMark = (strchr(word, ':') == nullptr)? 0:1;
+    if (!hasMark){
+        for (int j = 0; word[j] != '\0' && word[j] != '\n' && word[j] != ' '; j++){
+            word[j] = toupper(startAddr[j]);
+        }
+
+    }
+
+    return returnValue;
 }
 
 /*=======================================================================*/
@@ -535,7 +569,7 @@ static void CompileJumpArg(commands_t* codeStruct, char* secondCmdPtr){
     if (ptr) numArg = CheckMark(codeStruct, secondArg, FROM_FUNC);
     else     numArg = atol(secondArg);
 
-    *((uint64_t*)codeStruct->codePointer + codeStruct->pc)        = JMP;
+    *((uint64_t*)codeStruct->codePointer + codeStruct->pc)        = CMD_JMP;
     *((uint64_t*)codeStruct->codePointer + codeStruct->pc + 1)    = numArg;
     codeStruct->pc += 2;
 }
@@ -549,7 +583,7 @@ static void CompileCallArg(commands_t* codeStruct, char* secondCmdPtr){
 
     numArg = CheckMark(codeStruct, secondArg, FROM_FUNC);
 
-    *((uint64_t*)codeStruct->codePointer + codeStruct->pc)        = CALL;
+    *((uint64_t*)codeStruct->codePointer + codeStruct->pc)        = CMD_CALL;
     *((uint64_t*)codeStruct->codePointer + codeStruct->pc + 1)    = numArg;
     codeStruct->pc += 2;
 }
@@ -560,69 +594,102 @@ static void CompilePopArg(commands_t* codeStruct, bool* RunCommands, char* secon
 
 
     int64_t numArg = 0;
-            int64_t numReg = 0;
+        int64_t numReg = 0;
 
-            char secondArg[MAX_ARGLEN]  = "";
-            GetArg(second_cmdPtr, secondArg);
+        char secondArg[MAX_ARGLEN]  = "";
+        GetArg(second_cmdPtr, secondArg);
 
-            char* ptrMemory     = strchr(secondArg,'[');
-            char* ptrRegisters  = strchr(secondArg,'x');
-            char* ptrSum        = strchr(secondArg,'+');
-            bool mem    = (ptrMemory)       ?1:0;
-            bool reg    = (ptrRegisters)    ?1:0;
-            bool sum    = (ptrSum)          ?1:0;
-            char switchValue = mem * 4 + reg * 2 + sum;
+        char* ptrMemory     = strchr(secondArg,'[');
+        char* ptrRegisters  = strchr(secondArg,'x');
+        char* ptrSum        = strchr(secondArg,'+');
+        bool mem    = (ptrMemory)       ?1:0;
+        bool reg    = (ptrRegisters)    ?1:0;
+        bool sum    = (ptrSum)          ?1:0;
+        char switchValue = mem * 4 + reg * 2 + sum;
 
-            switch(switchValue){
-                case 2:{
-                    numReg = FindRegisterName(ptrRegisters - 1);
-
-
-                    *((uint64_t*)codeStruct->codePointer + codeStruct->pc)    = 0b01001001;
-                    *((uint64_t*)codeStruct->codePointer + codeStruct->pc + 1)= numReg;
-                    codeStruct->pc += 2;
-                    break;
-                }
-
-                case 4:{
-                    numArg = atol(ptrMemory + 1);
+        switch(switchValue){
+            case 2:{
+                numReg = FindRegisterName(ptrRegisters - 1);
 
 
-                    *((uint64_t*)codeStruct->codePointer + codeStruct->pc)    = 0b10101001;
-                    *((uint64_t*)codeStruct->codePointer + codeStruct->pc + 1)= numArg;
-                    codeStruct->pc += 2;
-                    break;
-                }
-
-                case 6:{
-                    numReg = FindRegisterName(ptrRegisters - 1);
-
-
-                    *((uint64_t*)codeStruct->codePointer + codeStruct->pc)    = 0b11001001;
-                    *((uint64_t*)codeStruct->codePointer + codeStruct->pc + 1)= numReg;
-                    codeStruct->pc += 2;
-                    break;
-                }
-
-                case 7:{
-                    numArg = atol(ptrSum + 1);
-                    numReg = FindRegisterName(ptrRegisters - 1);
-
-
-                    *((uint64_t*)codeStruct->codePointer + codeStruct->pc)    = 0b11101001;
-                    *((uint64_t*)codeStruct->codePointer + codeStruct->pc + 1)= numReg;
-                    *((uint64_t*)codeStruct->codePointer + codeStruct->pc + 2)= numArg;
-                    codeStruct->pc += 3;
-                    break;
-                }
-
-                default:{
-                    RunCommands = 0;
-                    printf(BRED "\nERROR\n\n" RESET);
-                    break;
-                }
+                *((uint64_t*)codeStruct->codePointer + codeStruct->pc)    = 0b01001001;
+                *((uint64_t*)codeStruct->codePointer + codeStruct->pc + 1)= numReg;
+                codeStruct->pc += 2;
+                break;
             }
+
+            case 4:{
+                numArg = atol(ptrMemory + 1);
+
+
+                *((uint64_t*)codeStruct->codePointer + codeStruct->pc)    = 0b10101001;
+                *((uint64_t*)codeStruct->codePointer + codeStruct->pc + 1)= numArg;
+                codeStruct->pc += 2;
+                break;
+            }
+
+            case 6:{
+                numReg = FindRegisterName(ptrRegisters - 1);
+
+
+                *((uint64_t*)codeStruct->codePointer + codeStruct->pc)    = 0b11001001;
+                *((uint64_t*)codeStruct->codePointer + codeStruct->pc + 1)= numReg;
+                codeStruct->pc += 2;
+                break;
+            }
+
+            case 7:{
+                numArg = atol(ptrSum + 1);
+                numReg = FindRegisterName(ptrRegisters - 1);
+
+
+                *((uint64_t*)codeStruct->codePointer + codeStruct->pc)    = 0b11101001;
+                *((uint64_t*)codeStruct->codePointer + codeStruct->pc + 1)= numReg;
+                *((uint64_t*)codeStruct->codePointer + codeStruct->pc + 2)= numArg;
+                codeStruct->pc += 3;
+                break;
+            }
+
+            default:{
+                RunCommands = 0;
+                printf(BRED "\nERROR\n\n" RESET);
+                break;
+            }
+        }
 }
+
+/*=======================================================================*/
+
+static void CompileArg(int arg, commands_t* codeStruct, bool* RunCommands, char* secondCmdPtr){
+    switch (arg){
+
+        case CMD_PUSH:{
+            CompilePushArg(codeStruct, RunCommands, secondCmdPtr);
+            break;
+        }
+
+        case CMD_POP:{
+            CompilePopArg(codeStruct, RunCommands, secondCmdPtr);
+            break;
+        }
+
+        case CMD_JMP:{
+            CompileJumpArg(codeStruct, secondCmdPtr);
+            break;
+        }
+
+        case CMD_JA:{
+            CompileJumpArg(codeStruct, secondCmdPtr);
+            break;
+        }
+
+        case CMD_CALL:{
+            CompileCallArg(codeStruct, secondCmdPtr);
+            break;
+        }
+    }
+}
+
 /*=======================================================================*/
 
 static void Compile(fileNames_t* fileNames){
@@ -639,96 +706,14 @@ static void Compile(fileNames_t* fileNames){
 
     while (RunCommands){
         char cmd[MAX_CMDLEN] = "";
+        ToUpper(cmd);
         if (numLine >= codeStruct.numSplitted) break;
 
         char* secondCmdPtr = GetWord(&codeStruct, numLine, MAX_CMDLEN, cmd);
 
-        if (!strcmp(cmd, "push")){
-            CompilePushArg(&codeStruct, &RunCommands, secondCmdPtr);
-        }
+        #include "../hpp/commands.hpp"
 
-        else if (!strcmp(cmd, "pop")){
-            CompilePopArg(&codeStruct, &RunCommands, secondCmdPtr);
-        }
-
-        else if (!strcmp(cmd, "add")){
-            *((uint64_t*)codeStruct.codePointer + codeStruct.pc) = ADD;
-            codeStruct.pc++;
-        }
-
-        else if (!strcmp(cmd, "sub")){
-            *((uint64_t*)codeStruct.codePointer + codeStruct.pc) = SUB;
-            codeStruct.pc++;
-        }
-
-        else if (!strcmp(cmd, "mul")){
-            *((uint64_t*)codeStruct.codePointer + codeStruct.pc) = MUL;
-            codeStruct.pc++;
-        }
-
-        else if (!strcmp(cmd, "div")){
-            *((uint64_t*)codeStruct.codePointer + codeStruct.pc) = DIV;
-            codeStruct.pc++;
-        }
-
-        else if (!strcmp(cmd, "sqrt")){
-            *((uint64_t*)codeStruct.codePointer + codeStruct.pc) = SQRT;
-            codeStruct.pc++;
-        }
-
-        else if (!strcmp(cmd, "sin")){
-            *((uint64_t*)codeStruct.codePointer + codeStruct.pc) = SIN;
-            codeStruct.pc++;
-        }
-
-        else if (!strcmp(cmd, "cos")){
-            *((uint64_t*)codeStruct.codePointer + codeStruct.pc) = COS;
-            codeStruct.pc++;
-        }
-
-        else if (!strcmp(cmd, "out")){
-            *((uint64_t*)codeStruct.codePointer + codeStruct.pc) = OUT;
-            codeStruct.pc++;
-        }
-
-        else if (!strcmp(cmd, "in")){
-            *((uint64_t*)codeStruct.codePointer + codeStruct.pc) = IN;
-            codeStruct.pc++;
-        }
-
-        else if (!strcmp(cmd, "dump")){
-            *((uint64_t*)codeStruct.codePointer + codeStruct.pc) = DUMP;
-            codeStruct.pc++;
-        }
-
-        else if (!strcmp(cmd, "draw")){
-            *((uint64_t*)codeStruct.codePointer + codeStruct.pc) = DRAW;
-            codeStruct.pc++;
-        }
-
-        else if (!strcmp(cmd, "jmp")){
-            CompileJumpArg(&codeStruct, secondCmdPtr);
-        }
-
-        else if (!strcmp(cmd, "ja")){
-            CompileJumpArg(&codeStruct, secondCmdPtr);
-        }
-
-        else if (!strcmp(cmd, "hlt")){
-            *((uint64_t*)codeStruct.codePointer + codeStruct.pc) = HLT;
-            codeStruct.pc++;
-        }
-
-        else if (!strcmp(cmd, "call")){
-            CompileCallArg(&codeStruct, secondCmdPtr);
-        }
-
-        else if (!strcmp(cmd, "ret")){
-            *((uint64_t*)codeStruct.codePointer + codeStruct.pc) = RET;
-            codeStruct.pc++;
-        }
-
-        else{
+        {
             if (!CheckMark(&codeStruct, cmd, FROM_CODE)){
                 *((uint64_t*)codeStruct.codePointer + codeStruct.pc) = ERR; //!!!
             }
@@ -737,8 +722,9 @@ static void Compile(fileNames_t* fileNames){
         numLine++;
     }
 
-    CommandsDump(&codeStruct);
+
     FixCode(&codeStruct);
+    CommandsDump(&codeStruct);
 
     OutputCodeBin(&codeStruct);
 
@@ -748,3 +734,4 @@ static void Compile(fileNames_t* fileNames){
     CommandsDtor(&codeStruct);
 }
 
+#undef DEF_CMD_
