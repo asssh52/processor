@@ -7,9 +7,7 @@
 #include "../hpp/colors.hpp"
 
 #define MEOW fprintf(stderr, "\e[0;31m" "\nmeow\n" "\e[0m");
-#define DEF_CMD_(cmd, num, arg,...) \
-    case CMD_##cmd:{ __VA_ARGS__;   \
-        break;}                     \
+
 
 const int       REGISTER_NUM    = 4;
 const int       SIZE_RAM        = 256;
@@ -334,6 +332,7 @@ static errors ProcessorDump(spu_t* spu){
         }
     }
 
+
     fprintf(logFile, "\n");
 
     if (logFile == stdout) printf(CYN);
@@ -448,6 +447,8 @@ static errors Draw2(spu_t* spu){
 
 /*=================================================================*/
 
+
+
 void Run(fileNames_t* fileNames){
 
     spu_t spu = {};
@@ -472,7 +473,17 @@ void Run(fileNames_t* fileNames){
         const char OPERATOR_MUSK = 0b00011111;
         switch (*nextArg & OPERATOR_MUSK){
 
+            // CODEGEN -------------------------
+
+            #define DEF_CMD_(cmd, num, arg,...) \
+                case CMD_##cmd:{ __VA_ARGS__;   \
+                    break;}
+
             #include "../hpp/commands.hpp"
+
+            #undef DEF_CMD_
+
+            // CODEGEN -------------------------
 
             default :{
                 printf(RED "\nERROR:pc=%lu\n" RESET, spu.pc);

@@ -504,9 +504,9 @@ static void CompilePushArg(commands_t* codeStruct, bool* RunCommands, char* seco
     char* ptrMemory     = strchr(secondArg,'[');
     char* ptrRegisters  = strchr(secondArg,'x');
     char* ptrSum        = strchr(secondArg,'+');
-    bool mem    = (ptrMemory)       ?1:0;
-    bool reg    = (ptrRegisters)    ?1:0;
-    bool sum    = (ptrSum)          ?1:0;
+    bool mem    = (bool) ptrMemory;
+    bool reg    = (bool) ptrRegisters;
+    bool sum    = (bool) ptrSum;
     char switchValue    = reg * 2 + sum;
 
     switch (switchValue){

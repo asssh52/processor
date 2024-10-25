@@ -173,3 +173,15 @@ DEF_CMD_(DRAW,  18, false,
             Draw2(&spu);
             spu.pc++;
         })
+
+DEF_CMD_(MEOW,  19, false,
+        {
+            int64_t numMeow = 0;
+            StackPop(spu.stk, &numMeow);
+
+            for (int i = 0; i < numMeow; i++){
+                printf("MEOW\n");
+            }
+
+            spu.pc++;
+        })
