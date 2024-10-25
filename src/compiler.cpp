@@ -330,7 +330,17 @@ int CheckMark(commands_t* codeStruct, char* arg, checkMarkParams param){   //ren
             }
 
             else{
-                return (codeStruct->labelsPointer + labelNum)->addr;
+                uint64_t returnValue = (codeStruct->labelsPointer + labelNum)->addr;
+
+                if (returnValue == -1){
+                    fixup_t* fxp_ptr = codeStruct->fixupPointer;
+
+                    (fxp_ptr + codeStruct->numElemsFixup)->labelNum = codeStruct->numElemsLabels - 1;
+                    (fxp_ptr + codeStruct->numElemsFixup)->codeAdr  = codeStruct->pc + 1;
+                    codeStruct->numElemsFixup++;
+                }
+
+                return returnValue;
             }
         }
 

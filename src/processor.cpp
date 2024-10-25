@@ -15,6 +15,10 @@ const int64_t   VERSION         = 5;
 const int64_t   DRAW_RES_X      = 16;
 const int64_t   DRAW_RES_Y      = 8;
 
+const char      immediateMask   = 0b00100000;
+const char      registerMask    = 0b01000000;
+const char      memoryMask      = 0b10000000;
+
 typedef struct fileNames{
 
     const char* inputFileName;
@@ -225,7 +229,7 @@ static int64_t* GetPopValue(spu_t* spu, int64_t nextArg){
     uint64_t tempReturnValue = 0;
 
     //registers
-    if (nextArg & 0b01000000){
+    if (nextArg & registerMask){
         spu->pc++;
         argValue    = *((int64_t*)spu->registersPointer + *((int64_t*)spu->codePointer + spu->pc));
         returnValue =
@@ -233,20 +237,20 @@ static int64_t* GetPopValue(spu_t* spu, int64_t nextArg){
     }
 
     //immediate
-    if (nextArg & 0b00100000){
+    if (nextArg & immediateMask){
         spu->pc++;
         argValue += *((int64_t*)spu->codePointer + spu->pc);
         *((int64_t*)spu->registersPointer) = argValue;
     }
 
     //memory
-    if (nextArg & 0b10000000){
+    if (nextArg & memoryMask){
         returnValue = (size_t)(spu->RAM + argValue);
     }
 
     spu->pc++;
 
-    if (!returnValue || (nextArg & 0b00100000 && nextArg & 0b01000000 && !(nextArg & 0b10000000))) return (int64_t*)spu->registersPointer;
+    if (!returnValue || (nextArg & immediateMask  && nextArg & registerMask && !(nextArg & memoryMask))) return (int64_t*)spu->registersPointer;
 
     return (int64_t*)returnValue;
 }
@@ -470,14 +474,12 @@ void Run(fileNames_t* fileNames){
         switch (*nextArg & OPERATOR_MUSK){
 
             case PUSH:{
-
                 StackPush(spu.stk, *GetPopValue(&spu, *nextArg));
 
                 break;
             }
 
             case POP:{
-
                 StackPop(spu.stk, GetPopValue(&spu, *nextArg));
 
                 break;
@@ -651,7 +653,7 @@ void Run(fileNames_t* fileNames){
 
             case DRAW:{
 
-                Draw2(&spu);
+                Draw1(&spu);
 
                 spu.pc++;
                 break;
