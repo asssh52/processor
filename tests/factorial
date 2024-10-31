@@ -1,0 +1,33 @@
+
+in
+pop ax
+
+call fact:
+out
+
+hlt
+
+
+
+fact:
+
+push ax
+push 0
+je end:
+
+push ax
+
+push 1
+push ax
+sub
+pop ax
+
+call fact:
+mul
+ret
+
+
+
+end:
+push 1
+ret

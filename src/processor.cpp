@@ -9,11 +9,11 @@
 #define MEOW fprintf(stderr, "\e[0;31m" "\nmeow\n" "\e[0m");
 
 const int       REGISTER_NUM    = 4;
-const int       SIZE_RAM        = 256;
+const int       SIZE_RAM        = 1024;
 const int64_t   SIGNATURE       = 0x574f454d;
 const int64_t   VERSION         = 5;
-const int64_t   DRAW_RES_X      = 16;
-const int64_t   DRAW_RES_Y      = 8;
+const int64_t   DRAW_RES_X      = 200;
+const int64_t   DRAW_RES_Y      = 200;
 
 const char      immediateMask   = 0b00100000;
 const char      registerMask    = 0b01000000;
@@ -77,7 +77,7 @@ int main(int argc, const char *argv[]){
 
     fileNames.inputFileName  = (argc == 3) ? argv[1]  : "./bin/user_input.asm";
     fileNames.outputFileName = (argc == 3) ? argv[2]  : "stdout";
-    fileNames.outputFileName   = "meow.txt";
+    fileNames.outputFileName = "meow.txt";
 
     Run(&fileNames);
 
@@ -111,6 +111,7 @@ static errors ProcessorCtor(spu_t* spu, const char* name){
     StackCtor(spu->stk);                                             // check if allocated
     StackCtor(spu->returnStack);
 
+
     //FILL STRUCTURE FIELDS:
     spu->numRegisters   = REGISTER_NUM;
     spu->pc = 0;
@@ -123,7 +124,7 @@ static errors ProcessorCtor(spu_t* spu, const char* name){
     spu->memCommandsAllocated   = SIZE_COMMAND * spu->numCommands;
 
     //INITIALIZE REGISTER BUFFER:
-    spu->registersPointer       = calloc(SIZE_ARG, spu->numRegisters);
+    spu->registersPointer       = calloc(SIZE_ARG, spu->numRegisters + 1);
     spu->memRegistersAllocated  = SIZE_ARG * spu->numRegisters;
 
     //INITIALIZE RAM:
@@ -376,7 +377,7 @@ static errors ProcessorDump(spu_t* spu){
         fprintf(logFile, "Registers:\n");
         if (logFile == stdout) printf(RESET);
 
-        for (int numReg = 0; numReg < spu->numRegisters; numReg++){
+        for (int numReg = 0; numReg < spu->numRegisters + 1; numReg++){
             fprintf(spu->logFile, "r<%d>:\t%lld\n", numReg, *(regPtr + numReg));
         }
     }
@@ -398,11 +399,11 @@ static errors Draw1(spu_t* spu){
                 for (int x = 0; x < DRAW_RES_Y; x++){
                     for (int y = 0; y < DRAW_RES_X; y++){
                         if (spu->RAM[x * DRAW_RES_Y + y] == 0){
-                            printf(".");
+                            printf("__");
                         }
 
                         else{
-                            printf("@");
+                            printf("00");
                         }
                     }
 
@@ -468,7 +469,7 @@ void Run(fileNames_t* fileNames){
             ProcessorDump(&spu);
         }
 
-        char* nextArg = (char*)spu.codePointer + spu.pc * SIZE_ARG;
+        int64_t* nextArg = (int64_t*)spu.codePointer + spu.pc;
 
         const char OPERATOR_MUSK = 0b00011111;
         switch (*nextArg & OPERATOR_MUSK){
@@ -606,7 +607,7 @@ void Run(fileNames_t* fileNames){
             case JMP:{
                 int64_t num_arg = 0;
 
-                num_arg = *(nextArg + 1 * SIZE_COMMAND);
+                num_arg = *(nextArg + 1);
 
                 spu.pc = num_arg;
 
@@ -616,27 +617,83 @@ void Run(fileNames_t* fileNames){
             case JA:{
                 int64_t num_arg = 0, first_arg = 0, second_arg = 0;
 
-                num_arg = *(nextArg + 1 * SIZE_COMMAND);
+                num_arg = *(nextArg + 1);
 
                 StackPop(spu.stk, &first_arg);
                 StackPop(spu.stk, &second_arg);
 
                 if (first_arg > second_arg){
+                    printf(MAG "%d\n" RESET, num_arg);
                     spu.pc = num_arg;
-
                     break;
                 }
 
                 else{
                     spu.pc += 2;
+                    break;
+                }
+            }
 
+            case JAE:{
+                int64_t num_arg = 0, first_arg = 0, second_arg = 0;
+
+                num_arg = *(nextArg + 1);
+
+                StackPop(spu.stk, &first_arg);
+                StackPop(spu.stk, &second_arg);
+
+                if (first_arg >= second_arg){
+                    spu.pc = num_arg;
+                    break;
+                }
+
+                else{
+                    spu.pc += 2;
+                    break;
+                }
+            }
+
+            case JE:{
+                int64_t num_arg = 0, first_arg = 0, second_arg = 0;
+
+                num_arg = *(nextArg + 1);
+
+                StackPop(spu.stk, &first_arg);
+                StackPop(spu.stk, &second_arg);
+
+                if (first_arg == second_arg){
+                    spu.pc = num_arg;
+                    break;
+                }
+
+                else{
+                    spu.pc += 2;
+                    break;
+                }
+            }
+
+            case JNE:{
+                int64_t num_arg = 0, first_arg = 0, second_arg = 0;
+
+                num_arg = *(nextArg + 1);
+
+                StackPop(spu.stk, &first_arg);
+                StackPop(spu.stk, &second_arg);
+
+                if (first_arg != second_arg){
+                    spu.pc = num_arg;
+                    break;
+                }
+
+                else{
+                    spu.pc += 2;
                     break;
                 }
             }
 
             case CALL:{
                 int64_t jump_to = 0;
-                jump_to = *(nextArg + 1 * SIZE_COMMAND);
+                jump_to = *(nextArg + 1);
                 StackPush(spu.returnStack, spu.pc);
 
                 spu.pc = jump_to;
@@ -645,6 +702,7 @@ void Run(fileNames_t* fileNames){
 
             case RET:{
                 int64_t num_arg = -1;
+                StackDump(spu.returnStack);
                 StackPop(spu.returnStack, &num_arg);
 
                 spu.pc = num_arg + 2;
@@ -654,6 +712,19 @@ void Run(fileNames_t* fileNames){
             case DRAW:{
 
                 Draw1(&spu);
+
+                spu.pc++;
+                break;
+            }
+
+            case MOD:{
+
+                int64_t numerator = 0, divisor = 0;
+
+                StackPop(spu.stk, &numerator);
+                StackPop(spu.stk, &divisor);
+
+                StackPush(spu.stk, numerator % divisor);
 
                 spu.pc++;
                 break;

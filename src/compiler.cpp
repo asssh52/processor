@@ -14,9 +14,9 @@ const int64_t VERSION = 5;
 
 const size_t MAX_CMDLEN = 128;
 const size_t MAX_ARGLEN = 32;
-const size_t MAX_LINES  = 64;
-const size_t MAX_LABELS = 8;
-const size_t MAX_FIXUP  = 8;
+const size_t MAX_LINES  = 512;
+const size_t MAX_LABELS = 16;
+const size_t MAX_FIXUP  = 16;
 
 static void     Compile     (fileNames_t*   fileNames);
 static errors   FillLabels  (commands_t*    codeStruct);
@@ -209,7 +209,7 @@ static errors CommandsDump(commands_t* codeStruct){
     if (logFile == stdout) printf(BLU);
     fprintf(logFile, "Splitted code:\n");
     for (int i = 0; i < codeStruct->numSplitted; i++){
-        printf("i:%d - \t%p \t size:%lu\n", i + 1, (codeStruct->splittedInput)[i].addr, (codeStruct->splittedInput)[i].size);
+        printf("i:%d \t- \t%p \t size:%lu\n", i + 1, (codeStruct->splittedInput)[i].addr, (codeStruct->splittedInput)[i].size);
     }
     if (logFile == stdout) printf(RESET);
 
@@ -223,7 +223,7 @@ static errors CommandsDump(commands_t* codeStruct){
     if (logFile == stdout) printf(RESET);
 
     for (size_t pc = 0; pc < MAX_NUM_COMMANDS; pc++){
-            fprintf(codeStruct->logFile, "pc<%lu>:\t%lld\n", pc, *(cmdPtr + pc));
+            fprintf(codeStruct->logFile, "pc<%lu>\t:\t%lld\n", pc, *(cmdPtr + pc));
     }
     fprintf(logFile, "=================================================\n");
 
@@ -547,7 +547,7 @@ static void CompilePushArg(commands_t* codeStruct, bool* RunCommands, char* seco
 
 /*=======================================================================*/
 
-static void CompileJumpArg(commands_t* codeStruct, char* secondCmdPtr){
+static void CompileJumpArg(commands_t* codeStruct, char* secondCmdPtr, int commandNum){
     int64_t numArg = 0;
     char secondArg[MAX_ARGLEN]  = "";
     GetArg(secondCmdPtr, secondArg);
@@ -557,7 +557,7 @@ static void CompileJumpArg(commands_t* codeStruct, char* secondCmdPtr){
     if (ptr) numArg = CheckMark(codeStruct, secondArg, FROM_FUNC);
     else     numArg = atol(secondArg);
 
-    *((uint64_t*)codeStruct->codePointer + codeStruct->pc)        = JMP;
+    *((uint64_t*)codeStruct->codePointer + codeStruct->pc)        = commandNum;
     *((uint64_t*)codeStruct->codePointer + codeStruct->pc + 1)    = numArg;
     codeStruct->pc += 2;
 }
@@ -729,11 +729,23 @@ static void Compile(fileNames_t* fileNames){
         }
 
         else if (!strcmp(cmd, "jmp")){
-            CompileJumpArg(&codeStruct, secondCmdPtr);
+            CompileJumpArg(&codeStruct, secondCmdPtr, JMP);
         }
 
         else if (!strcmp(cmd, "ja")){
-            CompileJumpArg(&codeStruct, secondCmdPtr);
+            CompileJumpArg(&codeStruct, secondCmdPtr, JA);
+        }
+
+        else if (!strcmp(cmd, "jae")){
+            CompileJumpArg(&codeStruct, secondCmdPtr, JAE);
+        }
+
+        else if (!strcmp(cmd, "je")){
+            CompileJumpArg(&codeStruct, secondCmdPtr, JE);
+        }
+
+        else if (!strcmp(cmd, "jne")){
+            CompileJumpArg(&codeStruct, secondCmdPtr, JNE);
         }
 
         else if (!strcmp(cmd, "hlt")){
@@ -747,6 +759,11 @@ static void Compile(fileNames_t* fileNames){
 
         else if (!strcmp(cmd, "ret")){
             *((uint64_t*)codeStruct.codePointer + codeStruct.pc) = RET;
+            codeStruct.pc++;
+        }
+
+        else if (!strcmp(cmd, "mod")){
+            *((uint64_t*)codeStruct.codePointer + codeStruct.pc) = MOD;
             codeStruct.pc++;
         }
 

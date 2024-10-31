@@ -1,0 +1,171 @@
+
+in
+push 1
+mul
+pop ax
+
+in
+push 1
+mul
+pop bx
+
+in
+push 1
+mul
+pop cx
+
+call QUADROBER:
+
+dump
+
+push [0]
+out
+
+push [1]
+out
+
+push [2]
+out
+
+hlt
+
+
+
+QUADROBER:
+
+push ax
+push 0
+je LINEAR:
+
+push 4
+push ax
+push cx
+mul
+mul
+
+push bx
+push bx
+mul
+
+sub
+pop [0]
+
+push 0
+push [0]
+je oneSol:
+
+push 0
+push [0]
+ja twoSol:
+
+jmp noSol:
+
+
+
+LINEAR:
+push bx
+push 0
+je infSol:              bx == 0
+
+push 1                  one sol linear
+pop [0]
+
+push bx
+push cx
+push 0
+sub
+
+div
+pop [1]
+push -666
+pop [2]
+
+ret
+
+
+
+infSol:                 inf sol
+push 666
+pop [0]
+push 1
+pop [1]
+push 1
+pop [2]
+
+ret
+
+noSol:                  no sol
+push 0
+pop [0]
+push -1
+pop [1]
+push -1
+pop [2]
+
+ret
+
+
+
+
+oneSol:                 one sol
+push 1
+pop [0]
+
+
+push 2
+push ax
+mul
+
+push bx
+push 0
+sub
+
+div
+
+pop [1]
+
+ret
+
+
+
+
+twoSol:
+
+
+push ax
+push 2
+mul
+
+push [0]
+sqrt
+
+push bx
+push 0
+sub
+
+sub
+div
+
+pop [1]
+
+
+push ax
+push 2
+mul
+
+push [0]
+sqrt
+
+push bx
+push 0
+sub
+
+add
+div
+
+pop [2]
+
+push 2
+pop [0]
+
+ret

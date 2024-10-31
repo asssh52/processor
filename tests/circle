@@ -1,0 +1,89 @@
+
+push 100
+pop ax
+
+push 25
+pop bx
+
+push 0
+pop cx
+
+push 50             //iks
+pop dx
+
+push 50            //y
+pop ex
+
+call do_circle:
+dump
+draw
+
+hlt
+
+
+
+do_circle:
+
+while:
+push ax
+push ax
+mul
+push cx
+ja end:
+
+push ax             x
+push cx
+mod
+
+push ex
+sub
+
+push ax
+push cx
+mod
+
+push dx
+sub
+
+mul
+
+
+push ax             y
+push cx
+div
+
+push ex
+sub
+
+push ax
+push cx
+div
+
+push ex
+sub
+
+mul
+
+add
+
+push bx
+push bx
+mul
+
+jae draw:
+push 0
+pop [cx]
+push cx+1
+pop cx
+jmp while:
+
+draw:
+push 1
+pop [cx]
+push cx+1
+pop cx
+jmp while:
+
+end:
+ret
+

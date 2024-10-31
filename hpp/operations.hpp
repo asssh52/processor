@@ -21,9 +21,15 @@ enum operations{
     DUMP    = 12,
     JMP     = 13,
     JA      = 14,
-    HLT     = 15,
+    JAE     = 15,
+    JE      = 16,
+    JNE     = 17,
 
-    CALL    = 16,
-    RET     = 17,
-    DRAW    = 18
+    HLT     = 18,
+
+    CALL    = 19,
+    RET     = 20,
+    DRAW    = 21,
+    MOD     = 22
+
 };
