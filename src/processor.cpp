@@ -730,6 +730,81 @@ void Run(fileNames_t* fileNames){
                 break;
             }
 
+            case LS_EQ:{
+
+                int64_t first = 0, second = 0, ans = 0;
+
+                StackPop(spu.stk, &first);
+                StackPop(spu.stk, &second);
+
+                if (first <= second) ans = 1;
+
+                StackPush(spu.stk, ans);
+
+                spu.pc++;
+                break;
+            }
+
+            case MR_EQ:{
+
+                int64_t first = 0, second = 0, ans = 0;
+
+                StackPop(spu.stk, &first);
+                StackPop(spu.stk, &second);
+
+                if (first >= second) ans = 1;
+
+                StackPush(spu.stk, ans);
+
+                spu.pc++;
+                break;
+            }
+
+            case LS:{
+
+                int64_t first = 0, second = 0, ans = 0;
+
+                StackPop(spu.stk, &first);
+                StackPop(spu.stk, &second);
+
+                if (first < second) ans = 1;
+
+                StackPush(spu.stk, ans);
+
+                spu.pc++;
+                break;
+            }
+
+            case MR:{
+
+                int64_t first = 0, second = 0, ans = 0;
+
+                StackPop(spu.stk, &first);
+                StackPop(spu.stk, &second);
+
+                if (first > second) ans = 1;
+
+                StackPush(spu.stk, ans);
+
+                spu.pc++;
+                break;
+            }
+
+            case EQL:{
+
+                int64_t first = 0, second = 0, ans = 0;
+
+                StackPop(spu.stk, &first);
+                StackPop(spu.stk, &second);
+
+                if (first == second) ans = 1;
+
+                StackPush(spu.stk, ans);
+
+                spu.pc++;
+                break;
+            }
+
             case HLT:{
                 RunCommands = 0;
 

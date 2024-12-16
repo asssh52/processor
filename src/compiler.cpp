@@ -421,7 +421,7 @@ static char* GetWord(commands_t* codeStruct, int numLine, int wordSize, char* wo
     char* returnValue = startAddr;
 
     for (int i = 0; i < line.size - 1; i++){
-        if (startAddr[i] == '\n' || startAddr[i] == ' '){
+        if (startAddr[i] == '\n' || startAddr[i] == ' ' || startAddr[i] == '\t'){
             word[i] = '\0';
 
             returnValue = startAddr + i + 1;
@@ -660,7 +660,7 @@ static void Compile(fileNames_t* fileNames){
     int numLine         = 0;
 
     while (RunCommands){
-        char cmd[MAX_CMDLEN] = "";
+        char cmd[MAX_CMDLEN] = {};
         if (numLine >= codeStruct.numSplitted) break;
 
         char* secondCmdPtr = GetWord(&codeStruct, numLine, MAX_CMDLEN, cmd);
@@ -764,6 +764,31 @@ static void Compile(fileNames_t* fileNames){
 
         else if (!strcmp(cmd, "mod")){
             *((uint64_t*)codeStruct.codePointer + codeStruct.pc) = MOD;
+            codeStruct.pc++;
+        }
+
+        else if (!strcmp(cmd, "less")){
+            *((uint64_t*)codeStruct.codePointer + codeStruct.pc) = LS;
+            codeStruct.pc++;
+        }
+
+        else if (!strcmp(cmd, "less_equal")){
+            *((uint64_t*)codeStruct.codePointer + codeStruct.pc) = LS_EQ;
+            codeStruct.pc++;
+        }
+
+        else if (!strcmp(cmd, "equal")){
+            *((uint64_t*)codeStruct.codePointer + codeStruct.pc) = EQL;
+            codeStruct.pc++;
+        }
+
+        else if (!strcmp(cmd, "more")){
+            *((uint64_t*)codeStruct.codePointer + codeStruct.pc) = MR;
+            codeStruct.pc++;
+        }
+
+        else if (!strcmp(cmd, "more_equal")){
+            *((uint64_t*)codeStruct.codePointer + codeStruct.pc) = MR_EQ;
             codeStruct.pc++;
         }
 

@@ -30,6 +30,12 @@ enum operations{
     CALL    = 19,
     RET     = 20,
     DRAW    = 21,
-    MOD     = 22
+    MOD     = 22,
+
+    LS_EQ   = 23,
+    MR_EQ   = 24,
+    EQL     = 25,
+    LS      = 26,
+    MR      = 27,
 
 };
